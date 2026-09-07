@@ -6,17 +6,18 @@ import java.util.Optional;
 
 public final class CommandLine {
     public static final String VERSION = "0.2.0";
-    private static final Map<String, Integer> MIN_ARGUMENTS = commands();
+    private static final Map<String, CommandSpec> COMMANDS = commands();
 
     private CommandLine() { }
 
     public static Optional<String> validate(String[] args) {
-        if (args.length == 0 || !args[0].startsWith("--")) return Optional.empty();
-        if (args[0].equals("--help") || args[0].equals("--version"))
-            return args.length == 1 ? Optional.empty() : Optional.of(args[0] + " 不接受额外参数");
-        Integer minimum = MIN_ARGUMENTS.get(args[0]);
-        if (minimum == null) return Optional.of("未知选项: " + args[0]);
-        if (args.length < minimum) return Optional.of(args[0] + " 缺少参数");
+        if (args.length == 0) return Optional.empty();
+        if (!args[0].startsWith("--"))
+            return args.length == 1 ? Optional.empty() : Optional.of("交互工作区模式最多接受一个路径参数");
+        CommandSpec spec = COMMANDS.get(args[0]);
+        if (spec == null) return Optional.of("未知选项: " + args[0]);
+        if (args.length < spec.minimum()) return Optional.of(args[0] + " 缺少参数");
+        if (args.length > spec.maximum()) return Optional.of(args[0] + " 参数过多");
         return Optional.empty();
     }
 
@@ -46,23 +47,28 @@ public final class CommandLine {
                 """.formatted(VERSION);
     }
 
-    private static Map<String, Integer> commands() {
-        var result = new LinkedHashMap<String, Integer>();
-        result.put("--check", 2);
-        result.put("--check-json", 2);
-        result.put("--plan", 2);
-        result.put("--report", 3);
-        result.put("--report-html", 3);
-        result.put("--portfolio", 2);
-        result.put("--portfolio-daily", 3);
-        result.put("--snapshot", 3);
-        result.put("--trend", 2);
-        result.put("--daily", 3);
-        result.put("--verify-build", 2);
-        result.put("--daily-verify", 3);
-        result.put("--state-status", 2);
-        result.put("--init-config", 2);
-        result.put("--validate-config", 2);
+    private static Map<String, CommandSpec> commands() {
+        var result = new LinkedHashMap<String, CommandSpec>();
+        result.put("--check", exact(2));
+        result.put("--check-json", exact(2));
+        result.put("--plan", exact(2));
+        result.put("--report", exact(3));
+        result.put("--report-html", exact(3));
+        result.put("--portfolio", exact(2));
+        result.put("--portfolio-daily", new CommandSpec(3, 4));
+        result.put("--snapshot", exact(3));
+        result.put("--trend", exact(2));
+        result.put("--daily", new CommandSpec(3, 5));
+        result.put("--verify-build", new CommandSpec(2, 3));
+        result.put("--daily-verify", new CommandSpec(3, 6));
+        result.put("--state-status", exact(2));
+        result.put("--init-config", exact(2));
+        result.put("--validate-config", exact(2));
+        result.put("--help", exact(1));
+        result.put("--version", exact(1));
         return Map.copyOf(result);
     }
+
+    private static CommandSpec exact(int count) { return new CommandSpec(count, count); }
+    private record CommandSpec(int minimum, int maximum) { }
 }

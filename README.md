@@ -77,7 +77,7 @@ java -jar target/workspace-agent-0.2.0.jar --init-config D:\path\to\project
 java -jar target/workspace-agent-0.2.0.jar --validate-config D:\path\to\project
 ```
 
-使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项或缺少参数会输出帮助并返回退出码 `2`。
+使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项、缺少参数或多余参数会输出帮助并返回退出码 `2`；所有参数都必须被明确消费，避免定时脚本的拼写错误被静默忽略。
 
 `--daily` 退出码约定：`0` 表示通过，`1` 表示运行故障，`2` 表示参数错误，`3` 表示质量门禁失败，`4` 表示构建失败，`5` 表示构建超时，`6` 表示同一状态目录已有任务运行。该约定便于任务计划程序和 CI 可靠判断结果。
 
