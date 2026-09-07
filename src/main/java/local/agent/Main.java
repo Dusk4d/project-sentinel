@@ -18,6 +18,7 @@ import local.agent.daily.DailyRunService;
 import local.agent.report.ActionPlanWriter;
 import local.agent.cli.CommandLine;
 import local.agent.report.HtmlReportStore;
+import local.agent.portfolio.PortfolioRunService;
 
 public final class Main {
     public static void main(String[] args) {
@@ -59,6 +60,11 @@ public final class Main {
         }
         if (args.length >= 2 && args[0].equals("--portfolio")) {
             runPortfolio(Path.of(args[1]));
+            return;
+        }
+        if (args.length >= 3 && args[0].equals("--portfolio-daily")) {
+            int minimum = args.length >= 4 ? parseMinimumScore(args[3]) : 70;
+            runPortfolioDaily(Path.of(args[1]), Path.of(args[2]), minimum);
             return;
         }
         if (args.length >= 3 && args[0].equals("--snapshot")) {
@@ -147,6 +153,22 @@ public final class Main {
         } catch (Exception e) {
             System.err.println("巡检失败: " + e.getMessage());
             System.exit(1);
+        }
+    }
+
+    private static void runPortfolioDaily(Path workspace, Path stateDirectory, int minimumScore) {
+        try {
+            var result = new PortfolioRunService().run(workspace, stateDirectory, minimumScore);
+            System.out.println("项目数: " + result.projectCount());
+            System.out.println("最低健康分: " + result.lowestScore());
+            System.out.println("组合 HTML: " + result.html());
+            System.out.println("组合 JSON: " + result.json());
+            System.out.println("组合门禁: " + (result.passed() ? "通过" : "未通过"));
+            if (!result.passed()) System.exit(3);
+        } catch (IllegalArgumentException e) {
+            System.err.println("参数错误: " + e.getMessage()); System.exit(2);
+        } catch (Exception e) {
+            System.err.println("组合巡检失败: " + e.getMessage()); System.exit(1);
         }
     }
 

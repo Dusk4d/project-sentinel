@@ -32,6 +32,7 @@ public final class CommandLine {
                   java -jar workspace-agent.jar --report <项目> <报告目录>
                   java -jar workspace-agent.jar --report-html <项目> <HTML文件>
                   java -jar workspace-agent.jar --portfolio <工作区>
+                  java -jar workspace-agent.jar --portfolio-daily <工作区> <状态目录> [最低分]
                   java -jar workspace-agent.jar --snapshot <项目> <历史文件>
                   java -jar workspace-agent.jar --trend <历史文件>
                   java -jar workspace-agent.jar --daily <项目> <状态目录> [最低分]
@@ -48,6 +49,7 @@ public final class CommandLine {
         result.put("--report", 3);
         result.put("--report-html", 3);
         result.put("--portfolio", 2);
+        result.put("--portfolio-daily", 3);
         result.put("--snapshot", 3);
         result.put("--trend", 2);
         result.put("--daily", 3);
