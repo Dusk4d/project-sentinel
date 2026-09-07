@@ -301,6 +301,7 @@ public final class Main {
             System.out.println("构建日志: " + evidence.latestLog());
             System.out.println("构建历史: " + evidence.history());
             System.out.println("归档日志: " + evidence.archivedLog());
+            System.out.println("最新行动计划: " + daily.latestPlanJson());
             if (!build.passed()) System.exit(build.status() == local.agent.verification.BuildVerification.Status.TIMED_OUT ? 5 : 4);
             if (!daily.passed()) System.exit(3);
         } catch (IllegalArgumentException e) {
@@ -319,6 +320,7 @@ public final class Main {
             System.out.println("报告: " + result.report());
             System.out.println("最新 HTML: " + result.latestHtml());
             System.out.println("最新 JSON: " + result.latestJson());
+            System.out.println("最新行动计划: " + result.latestPlanJson());
             System.out.println("质量门禁: " + (result.passed() ? "通过" : "未通过")
                     + "（当前 " + result.score() + "，最低 " + result.minimumScore() + "）");
             printRegressionGate(result);

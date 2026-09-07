@@ -31,6 +31,12 @@ final class DailyRunServiceTest {
         assertTrue(Files.isRegularFile(first.history()));
         assertTrue(Files.readString(first.latestHtml()).startsWith("<!doctype html>"));
         assertTrue(Files.readString(first.latestJson()).contains("\"schemaVersion\": 1"));
+        String plan = Files.readString(first.latestPlanJson());
+        assertTrue(plan.contains("\"schemaVersion\": 1"));
+        assertTrue(plan.contains("\"project\": \"project\""));
+        assertTrue(plan.contains("\"currentHealthScore\": " + first.score()));
+        assertTrue(plan.contains("\"actionCount\": 1"));
+        assertTrue(plan.contains("\"ruleId\": \"build.lock\""));
         assertTrue(first.trend().contains("快照数：1"));
 
         var second = service.run(project, state, 100);
@@ -38,6 +44,7 @@ final class DailyRunServiceTest {
         assertEquals(first.score(), second.previousScore());
         assertTrue(second.regressionPassed());
         assertEquals(state.resolve("latest.html").toAbsolutePath(), second.latestHtml());
+        assertEquals(state.resolve("latest-plan.json").toAbsolutePath(), second.latestPlanJson());
         assertThrows(IllegalArgumentException.class, () -> service.run(project, state, 101));
     }
 

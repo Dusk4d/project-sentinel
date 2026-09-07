@@ -7,6 +7,7 @@ import local.agent.history.TrendReporter;
 import local.agent.report.ReportStore;
 import local.agent.report.HtmlReportStore;
 import local.agent.report.JsonReportStore;
+import local.agent.report.ActionPlanJsonStore;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -28,12 +29,13 @@ public final class DailyRunService {
         Path report = new ReportStore().save(profile, reports);
         Path latestHtml = new HtmlReportStore().save(profile, stateRoot.resolve("latest.html"));
         Path latestJson = new JsonReportStore().save(profile, stateRoot.resolve("latest.json"));
+        Path latestPlanJson = new ActionPlanJsonStore().save(profile, stateRoot.resolve("latest-plan.json"));
         var snapshots = new SnapshotStore();
         var before = snapshots.read(history);
         Integer previousScore = before.isEmpty() ? null : before.get(before.size() - 1).score();
         snapshots.append(history, HealthSnapshot.from(profile));
         String trend = new TrendReporter().render(snapshots.read(history));
         return new DailyRunResult(profile.healthScore(), minimumScore, previousScore, maximumScoreDrop,
-                report, latestHtml, latestJson, history, trend);
+                report, latestHtml, latestJson, latestPlanJson, history, trend);
     }
 }
