@@ -59,6 +59,9 @@ java -jar target/workspace-agent-0.2.0.jar --trend D:\path\to\history.tsv
 
 # 推荐给定时任务：一次完成报告、快照、趋势和质量门禁；最低分默认 70
 java -jar target/workspace-agent-0.2.0.jar --daily D:\path\to\project D:\path\to\agent-state 80
+
+# 显式执行项目测试；默认超时 120 秒，最大 1800 秒
+java -jar target/workspace-agent-0.2.0.jar --verify-build D:\path\to\project 120
 ```
 
 使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项或缺少参数会输出帮助并返回退出码 `2`。
@@ -66,6 +69,8 @@ java -jar target/workspace-agent-0.2.0.jar --daily D:\path\to\project D:\path\to
 `--daily` 退出码约定：`0` 表示通过，`1` 表示运行故障，`2` 表示参数错误，`3` 表示健康分低于门禁。该约定便于任务计划程序和 CI 可靠判断结果。
 
 每次 `--daily` 会在状态目录中原子更新 `latest.html` 与 `latest.json`，追加 `history.tsv`，并在 `reports` 子目录保存带时间戳的 Markdown。历史报告不会被自动删除。
+
+`--verify-build` 会执行项目代码，只应对可信项目显式调用；默认扫描和每日健康检查仍为静态只读分析。构建失败返回 `4`，超时返回 `5`，输出最多保留 64 KiB。
 
 JSON 输出包含 `schemaVersion`。消费者应按版本解析字段，不依赖字段排列顺序。
 

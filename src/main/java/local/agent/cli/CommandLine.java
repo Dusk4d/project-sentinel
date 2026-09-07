@@ -36,6 +36,7 @@ public final class CommandLine {
                   java -jar workspace-agent.jar --snapshot <项目> <历史文件>
                   java -jar workspace-agent.jar --trend <历史文件>
                   java -jar workspace-agent.jar --daily <项目> <状态目录> [最低分]
+                  java -jar workspace-agent.jar --verify-build <项目> [超时秒]
                   java -jar workspace-agent.jar --help
                   java -jar workspace-agent.jar --version
                 """.formatted(VERSION);
@@ -53,6 +54,7 @@ public final class CommandLine {
         result.put("--snapshot", 3);
         result.put("--trend", 2);
         result.put("--daily", 3);
+        result.put("--verify-build", 2);
         return Map.copyOf(result);
     }
 }

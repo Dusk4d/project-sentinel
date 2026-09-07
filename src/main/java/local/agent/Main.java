@@ -19,6 +19,8 @@ import local.agent.report.ActionPlanWriter;
 import local.agent.cli.CommandLine;
 import local.agent.report.HtmlReportStore;
 import local.agent.portfolio.PortfolioRunService;
+import local.agent.verification.BuildVerifier;
+import java.time.Duration;
 
 public final class Main {
     public static void main(String[] args) {
@@ -78,6 +80,11 @@ public final class Main {
         if (args.length >= 3 && args[0].equals("--daily")) {
             int minimum = args.length >= 4 ? parseMinimumScore(args[3]) : 70;
             runDaily(Path.of(args[1]), Path.of(args[2]), minimum);
+            return;
+        }
+        if (args.length >= 2 && args[0].equals("--verify-build")) {
+            int seconds = args.length >= 3 ? parsePositiveSeconds(args[2]) : 120;
+            runBuildVerification(Path.of(args[1]), seconds);
             return;
         }
         Path workspace = args.length == 0 ? Path.of(".") : Path.of(args[0]);
@@ -197,6 +204,31 @@ public final class Main {
             System.err.println("最低健康分必须是整数: " + value);
             System.exit(2);
             return -1;
+        }
+    }
+
+    private static int parsePositiveSeconds(String value) {
+        try {
+            int seconds = Integer.parseInt(value);
+            if (seconds < 1 || seconds > 1800) throw new NumberFormatException();
+            return seconds;
+        } catch (NumberFormatException e) {
+            System.err.println("超时秒数必须是 1 到 1800 的整数: " + value); System.exit(2); return -1;
+        }
+    }
+
+    private static void runBuildVerification(Path project, int timeoutSeconds) {
+        try {
+            var result = new BuildVerifier().verify(project, Duration.ofSeconds(timeoutSeconds));
+            System.out.println("状态: " + result.status());
+            System.out.println("命令: " + String.join(" ", result.command()));
+            System.out.println("耗时: " + result.duration().toMillis() + " ms");
+            System.out.print(result.output());
+            if (!result.passed()) System.exit(result.status() == local.agent.verification.BuildVerification.Status.TIMED_OUT ? 5 : 4);
+        } catch (IllegalArgumentException e) {
+            System.err.println("参数错误: " + e.getMessage()); System.exit(2);
+        } catch (Exception e) {
+            System.err.println("构建验证失败: " + e.getMessage()); System.exit(1);
         }
     }
 
