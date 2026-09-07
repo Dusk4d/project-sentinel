@@ -12,12 +12,16 @@ import java.io.ByteArrayOutputStream;
 
 public final class BuildVerifier {
     private static final int MAX_OUTPUT_CHARS = 64 * 1024;
+    private final BuildCommandProvider commands;
+
+    public BuildVerifier() { this(new BuildCommandDetector()); }
+    public BuildVerifier(BuildCommandProvider commands) { this.commands = commands; }
 
     public BuildVerification verify(Path project, Duration timeout) throws IOException, InterruptedException {
         if (timeout.isNegative() || timeout.isZero() || timeout.compareTo(Duration.ofMinutes(30)) > 0)
             throw new IllegalArgumentException("构建超时必须大于 0 且不超过 30 分钟");
         Path root = project.toRealPath();
-        List<String> command = new BuildCommandDetector().detect(root);
+        List<String> command = commands.detect(root);
         if (command.isEmpty()) return new BuildVerification(BuildVerification.Status.UNSUPPORTED, command, -1, Duration.ZERO, "未识别可执行构建命令");
         Instant started = Instant.now();
         Process process = new ProcessBuilder(command).directory(root.toFile()).redirectErrorStream(true).start();
