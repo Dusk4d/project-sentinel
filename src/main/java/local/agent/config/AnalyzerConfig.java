@@ -9,8 +9,10 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Properties;
 import java.util.Set;
+import local.agent.analysis.ScoreWeights;
 
-public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disabledRules, int maxFiles, long maxTextBytes, int todoWarningThreshold) {
+public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disabledRules, int maxFiles, long maxTextBytes,
+                             int todoWarningThreshold, ScoreWeights scoreWeights) {
     public static final String FILE_NAME = ".workspace-agent.properties";
     private static final Set<String> DEFAULT_IGNORED = Set.of(".git", "target", "build", ".idea", ".gradle", "node_modules", "agent-state");
 
@@ -26,7 +28,7 @@ public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disable
             throw new IllegalArgumentException("rules.disabled 包含无效规则 ID");
     }
 
-    public static AnalyzerConfig defaults() { return new AnalyzerConfig(DEFAULT_IGNORED, Set.of(), 10_000, 256 * 1024L, 20); }
+    public static AnalyzerConfig defaults() { return new AnalyzerConfig(DEFAULT_IGNORED, Set.of(), 10_000, 256 * 1024L, 20, ScoreWeights.DEFAULT); }
 
     public static AnalyzerConfig load(Path projectRoot) throws IOException {
         Path file = projectRoot.resolve(FILE_NAME);
@@ -41,7 +43,9 @@ public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disable
             return new AnalyzerConfig(ignored, disabled,
                     integer(properties, "scan.maxFiles", 10_000),
                     integer(properties, "scan.maxTextBytes", 256 * 1024),
-                    integer(properties, "todo.warningThreshold", 20));
+                    integer(properties, "todo.warningThreshold", 20),
+                    new ScoreWeights(integer(properties, "score.high", 25),
+                            integer(properties, "score.medium", 12), integer(properties, "score.low", 5)));
         } catch (IllegalArgumentException e) {
             throw new IOException("配置文件无效 " + file + ": " + e.getMessage(), e);
         }

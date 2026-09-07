@@ -53,7 +53,7 @@ public final class ProjectAnalyzer {
         if (files.size() >= config.maxFiles()) add(config, findings, new Finding("scan.file-limit", Severity.MEDIUM, "规模", "扫描达到 " + config.maxFiles() + " 文件上限", "分析结果可能不完整", "配置更精确的忽略目录或拆分项目"));
 
         return new ProjectProfile(normalized, normalized.getFileName().toString(), ecosystem, files.size(), sourceCount,
-                testCount, todos, readme, build, gitIgnore, List.copyOf(findings));
+                testCount, todos, readme, build, gitIgnore, config.scoreWeights(), List.copyOf(findings));
     }
 
     private boolean isIgnored(Path relative, AnalyzerConfig config) {

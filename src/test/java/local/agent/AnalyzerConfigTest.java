@@ -39,4 +39,18 @@ final class AnalyzerConfigTest {
         assertFalse(profile.findings().stream().anyMatch(f -> f.ruleId().equals("legal.license")));
         assertTrue(profile.findings().stream().anyMatch(f -> f.ruleId().equals("build.manifest")));
     }
+
+    @Test void appliesValidatedScoreWeights() throws Exception {
+        Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "score.high=40\nscore.medium=15\nscore.low=2\n");
+        var profile = new ProjectAnalyzer().analyze(root);
+        assertEquals(40, profile.scoreWeights().high());
+        assertEquals(15, profile.scoreWeights().medium());
+        assertEquals(2, profile.scoreWeights().low());
+        assertEquals(41, profile.healthScore());
+    }
+
+    @Test void rejectsInvertedScoreWeights() throws Exception {
+        Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "score.high=5\nscore.medium=20\nscore.low=1\n");
+        assertThrows(IOException.class, () -> new ProjectAnalyzer().analyze(root));
+    }
 }

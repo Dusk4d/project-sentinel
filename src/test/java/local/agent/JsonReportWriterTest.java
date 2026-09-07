@@ -17,6 +17,7 @@ final class JsonReportWriterTest {
                 true, true, true, List.of(new Finding("security.demo", Severity.HIGH, "安全", "line1\nline2", "x\\y", "fix\tit")));
         String json = new JsonReportWriter().render(profile);
         assertTrue(json.contains("\"schemaVersion\": 1"));
+        assertTrue(json.contains("\"scoreWeights\": {\"high\": 25, \"medium\": 12, \"low\": 5}"));
         assertTrue(json.contains("\"ruleId\": \"security.demo\""));
         assertTrue(json.contains("\"project\": \"a\\\"b\""));
         assertTrue(json.contains("Java\\nMaven"));

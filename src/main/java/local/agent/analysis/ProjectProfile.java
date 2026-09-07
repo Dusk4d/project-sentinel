@@ -14,15 +14,18 @@ public record ProjectProfile(
         boolean hasReadme,
         boolean hasBuildFile,
         boolean hasGitIgnore,
+        ScoreWeights scoreWeights,
         List<Finding> findings) {
 
+    public ProjectProfile(Path root, String name, String ecosystem, int fileCount, int sourceFileCount,
+                          int testFileCount, int todoCount, boolean hasReadme, boolean hasBuildFile,
+                          boolean hasGitIgnore, List<Finding> findings) {
+        this(root, name, ecosystem, fileCount, sourceFileCount, testFileCount, todoCount, hasReadme,
+                hasBuildFile, hasGitIgnore, ScoreWeights.DEFAULT, findings);
+    }
+
     public int healthScore() {
-        int deductions = findings.stream().mapToInt(f -> switch (f.severity()) {
-            case HIGH -> 25;
-            case MEDIUM -> 12;
-            case LOW -> 5;
-            case INFO -> 0;
-        }).sum();
+        int deductions = findings.stream().mapToInt(f -> scoreWeights.deduction(f.severity())).sum();
         return Math.max(0, 100 - deductions);
     }
 }
