@@ -13,7 +13,13 @@ import java.nio.file.Path;
 
 public final class DailyRunService {
     public DailyRunResult run(Path project, Path stateDirectory, int minimumScore) throws IOException {
+        return run(project, stateDirectory, minimumScore, 100);
+    }
+
+    public DailyRunResult run(Path project, Path stateDirectory, int minimumScore, int maximumScoreDrop) throws IOException {
         if (minimumScore < 0 || minimumScore > 100) throw new IllegalArgumentException("最低健康分必须在 0 到 100 之间");
+        if (maximumScoreDrop < 0 || maximumScoreDrop > 100)
+            throw new IllegalArgumentException("最大允许降幅必须在 0 到 100 之间");
         Path projectRoot = project.toAbsolutePath().normalize();
         Path stateRoot = stateDirectory.toAbsolutePath().normalize();
         var profile = new ProjectAnalyzer().analyze(projectRoot);
@@ -23,8 +29,11 @@ public final class DailyRunService {
         Path latestHtml = new HtmlReportStore().save(profile, stateRoot.resolve("latest.html"));
         Path latestJson = new JsonReportStore().save(profile, stateRoot.resolve("latest.json"));
         var snapshots = new SnapshotStore();
+        var before = snapshots.read(history);
+        Integer previousScore = before.isEmpty() ? null : before.get(before.size() - 1).score();
         snapshots.append(history, HealthSnapshot.from(profile));
         String trend = new TrendReporter().render(snapshots.read(history));
-        return new DailyRunResult(profile.healthScore(), minimumScore, report, latestHtml, latestJson, history, trend);
+        return new DailyRunResult(profile.healthScore(), minimumScore, previousScore, maximumScoreDrop,
+                report, latestHtml, latestJson, history, trend);
     }
 }

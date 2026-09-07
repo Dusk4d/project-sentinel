@@ -81,7 +81,8 @@ public final class Main {
         }
         if (args.length >= 3 && args[0].equals("--daily")) {
             int minimum = args.length >= 4 ? parseMinimumScore(args[3]) : 70;
-            runDaily(Path.of(args[1]), Path.of(args[2]), minimum);
+            int maximumDrop = args.length >= 5 ? parseScoreDrop(args[4]) : 100;
+            runDaily(Path.of(args[1]), Path.of(args[2]), minimum, maximumDrop);
             return;
         }
         if (args.length >= 2 && args[0].equals("--verify-build")) {
@@ -92,7 +93,8 @@ public final class Main {
         if (args.length >= 3 && args[0].equals("--daily-verify")) {
             int minimum = args.length >= 4 ? parseMinimumScore(args[3]) : 70;
             int seconds = args.length >= 5 ? parsePositiveSeconds(args[4]) : 120;
-            runDailyVerify(Path.of(args[1]), Path.of(args[2]), minimum, seconds);
+            int maximumDrop = args.length >= 6 ? parseScoreDrop(args[5]) : 100;
+            runDailyVerify(Path.of(args[1]), Path.of(args[2]), minimum, seconds, maximumDrop);
             return;
         }
         Path workspace = args.length == 0 ? Path.of(".") : Path.of(args[0]);
@@ -225,6 +227,16 @@ public final class Main {
         }
     }
 
+    private static int parseScoreDrop(String value) {
+        try {
+            int score = Integer.parseInt(value);
+            if (score < 0 || score > 100) throw new NumberFormatException();
+            return score;
+        } catch (NumberFormatException e) {
+            System.err.println("最大允许降幅必须是 0 到 100 的整数: " + value); System.exit(2); return -1;
+        }
+    }
+
     private static void runBuildVerification(Path project, int timeoutSeconds) {
         try {
             var result = new BuildVerifier().verify(project, Duration.ofSeconds(timeoutSeconds));
@@ -240,15 +252,15 @@ public final class Main {
         }
     }
 
-    private static void runDailyVerify(Path project, Path stateDirectory, int minimumScore, int timeoutSeconds) {
+    private static void runDailyVerify(Path project, Path stateDirectory, int minimumScore, int timeoutSeconds, int maximumDrop) {
         try {
-            var daily = new DailyRunService().run(project, stateDirectory, minimumScore);
+            var daily = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
             var build = new BuildVerifier().verify(project, Duration.ofSeconds(timeoutSeconds));
             var store = new AtomicTextStore();
             Path buildJson = store.write(stateDirectory.resolve("latest-build.json"), new BuildVerificationJsonWriter().render(build));
             Path buildLog = store.write(stateDirectory.resolve("latest-build.log"), build.output());
             System.out.print(daily.trend());
-            System.out.println("静态健康分: " + daily.score() + "，门禁: " + (daily.passed() ? "通过" : "未通过"));
+            printDailyGate(daily);
             System.out.println("构建状态: " + build.status() + "，耗时: " + build.duration().toMillis() + " ms");
             System.out.println("构建 JSON: " + buildJson);
             System.out.println("构建日志: " + buildLog);
@@ -261,15 +273,16 @@ public final class Main {
         }
     }
 
-    private static void runDaily(Path project, Path stateDirectory, int minimumScore) {
+    private static void runDaily(Path project, Path stateDirectory, int minimumScore, int maximumDrop) {
         try {
-            var result = new DailyRunService().run(project, stateDirectory, minimumScore);
+            var result = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
             System.out.print(result.trend());
             System.out.println("报告: " + result.report());
             System.out.println("最新 HTML: " + result.latestHtml());
             System.out.println("最新 JSON: " + result.latestJson());
             System.out.println("质量门禁: " + (result.passed() ? "通过" : "未通过")
                     + "（当前 " + result.score() + "，最低 " + result.minimumScore() + "）");
+            printRegressionGate(result);
             if (!result.passed()) System.exit(3);
         } catch (IllegalArgumentException e) {
             System.err.println("参数错误: " + e.getMessage());
@@ -277,6 +290,20 @@ public final class Main {
         } catch (Exception e) {
             System.err.println("每日运行失败: " + e.getMessage());
             System.exit(1);
+        }
+    }
+
+    private static void printDailyGate(local.agent.daily.DailyRunResult result) {
+        System.out.println("静态健康分: " + result.score() + "，分数门禁: " + (result.scorePassed() ? "通过" : "未通过"));
+        printRegressionGate(result);
+    }
+
+    private static void printRegressionGate(local.agent.daily.DailyRunResult result) {
+        if (result.previousScore() == null) {
+            System.out.println("回归门禁: 无上次快照，本次作为基线");
+        } else {
+            System.out.println("回归门禁: " + (result.regressionPassed() ? "通过" : "未通过")
+                    + "（降幅 " + result.scoreDrop() + "，最大允许 " + result.maximumScoreDrop() + "）");
         }
     }
 }

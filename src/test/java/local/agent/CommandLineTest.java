@@ -11,6 +11,7 @@ final class CommandLineTest {
         assertTrue(CommandLine.validate(new String[]{"project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--check", "project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--daily", "project", "state", "80"}).isEmpty());
+        assertTrue(CommandLine.usage().contains("最大允许降幅"));
         assertTrue(CommandLine.validate(new String[]{"--help"}).isEmpty());
         assertTrue(CommandLine.usage().contains("--check-json <项目>"));
     }
