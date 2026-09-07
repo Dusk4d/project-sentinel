@@ -21,6 +21,8 @@ final class DailyRunServiceTest {
         Files.writeString(project.resolve("README.md"), "# demo");
         Files.writeString(project.resolve("LICENSE"), "MIT");
         Files.writeString(project.resolve(".gitignore"), "target/");
+        Files.createDirectories(project.resolve(".github/workflows"));
+        Files.writeString(project.resolve(".github/workflows/ci.yml"), "name: test");
         Files.writeString(project.resolve("src/main/java/App.java"), "class App {}");
         Files.writeString(project.resolve("src/test/java/AppTest.java"), "class AppTest {}");
 
@@ -57,6 +59,8 @@ final class DailyRunServiceTest {
         Files.writeString(project.resolve("README.md"), "# demo");
         Files.writeString(project.resolve("LICENSE"), "MIT");
         Files.writeString(project.resolve(".gitignore"), "target/");
+        Files.createDirectories(project.resolve(".github/workflows"));
+        Files.writeString(project.resolve(".github/workflows/ci.yml"), "name: test");
         Files.writeString(project.resolve("src/main/java/App.java"), "class App {}");
         Files.writeString(project.resolve("src/test/java/AppTest.java"), "class AppTest {}");
 

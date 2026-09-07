@@ -48,6 +48,16 @@ final class ProjectAnalyzerTest {
         assertFalse(locked.findings().stream().anyMatch(f -> f.message().contains("版本未锁定")));
     }
 
+    @Test void reportsMissingCiAndRecognizesGithubWorkflowWithoutReadingIt() throws Exception {
+        Files.writeString(root.resolve("pom.xml"), "<project/>");
+        var missing = new ProjectAnalyzer().analyze(root);
+        assertTrue(missing.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.AUTOMATION_CI)));
+        Files.createDirectories(root.resolve(".github/workflows"));
+        Files.writeString(root.resolve(".github/workflows/ci.yml"), "not parsed as yaml");
+        var configured = new ProjectAnalyzer().analyze(root);
+        assertFalse(configured.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.AUTOMATION_CI)));
+    }
+
     @Test void excludesFileSymlinkPointingOutsideProject() throws Exception {
         Path project = Files.createDirectory(root.resolve("project"));
         Files.writeString(project.resolve("pom.xml"), "<project/>");

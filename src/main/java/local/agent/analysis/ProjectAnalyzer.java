@@ -47,6 +47,9 @@ public final class ProjectAnalyzer {
         if (!build) add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST, Severity.HIGH, "可复现性", "缺少可识别的构建清单", "未发现常见构建文件", "添加与技术栈匹配的构建配置"));
         if (!gitIgnore) add(config, findings, new Finding(RuleCatalog.VCS_GITIGNORE, Severity.LOW, "版本控制", "缺少 .gitignore", "项目根目录未发现 .gitignore", "排除构建产物、IDE 文件和本地机密"));
         if (!license) add(config, findings, new Finding(RuleCatalog.LEGAL_LICENSE, Severity.LOW, "合规", "缺少明确的软件许可证", "项目根目录未发现 LICENSE 或 COPYING", "若计划分享或开源，选择并添加合适许可证"));
+        if (build && !hasCi(normalized)) add(config, findings, new Finding(RuleCatalog.AUTOMATION_CI, Severity.LOW, "自动化",
+                "项目可构建但未发现 CI 配置", "未发现 GitHub Actions、GitLab CI、Azure Pipelines、CircleCI、Jenkins、Buildkite 或 Bitbucket Pipelines 配置",
+                "添加至少执行编译和测试的 CI 流水线"));
         addReproducibilityFinding(normalized, ecosystem, findings, config);
         var sensitive = files.stream().filter(this::hasSensitiveName).map(normalized::relativize).limit(5).toList();
         if (!sensitive.isEmpty()) add(config, findings, new Finding(RuleCatalog.SECURITY_SENSITIVE_FILE, Severity.HIGH, "安全", "发现可能包含密钥或本地配置的敏感文件名",
@@ -124,6 +127,23 @@ public final class ProjectAnalyzer {
         };
         if (!reproducible) add(config, findings, new Finding(RuleCatalog.BUILD_LOCK, Severity.LOW, "可复现性", "依赖或构建工具版本未锁定",
                 "技术栈为 " + ecosystem + "，未发现对应 wrapper 或锁文件", "生成并提交该技术栈的 wrapper 或依赖锁文件"));
+    }
+
+    private boolean hasCi(Path root) {
+        if (hasAny(root, ".gitlab-ci.yml", "azure-pipelines.yml", "Jenkinsfile",
+                ".circleci/config.yml", ".buildkite/pipeline.yml", "bitbucket-pipelines.yml", ".woodpecker.yml")) return true;
+        Path workflows = root.resolve(".github/workflows");
+        try {
+            if (!Files.isDirectory(workflows)) return false;
+            Path real = workflows.toRealPath();
+            if (!real.startsWith(root)) return false;
+            try (var files = Files.list(real)) {
+                return files.filter(path -> isSafeRegularFile(root, path)).map(path -> path.getFileName().toString().toLowerCase(Locale.ROOT))
+                        .anyMatch(name -> name.endsWith(".yml") || name.endsWith(".yaml"));
+            }
+        } catch (IOException ignored) {
+            return false;
+        }
     }
 
     private void add(AnalyzerConfig config, List<Finding> findings, Finding finding) {
