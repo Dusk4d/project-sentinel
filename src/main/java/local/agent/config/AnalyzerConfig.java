@@ -21,6 +21,8 @@ public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disable
                              int todoWarningThreshold, ScoreWeights scoreWeights, Map<String, RuleWaiver> waivers) {
     public static final String FILE_NAME = ".workspace-agent.properties";
     private static final Set<String> DEFAULT_IGNORED = Set.of(".git", "target", "build", ".idea", ".gradle", "node_modules", "agent-state");
+    private static final Set<String> KNOWN_KEYS = Set.of("ignore.directories", "rules.disabled", "scan.maxFiles",
+            "scan.maxTextBytes", "todo.warningThreshold", "score.high", "score.medium", "score.low");
 
     public AnalyzerConfig {
         ignoredDirectories = Set.copyOf(ignoredDirectories);
@@ -58,6 +60,7 @@ public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disable
         }
         if (loadedFiles.isEmpty()) return defaults();
         try {
+            validateKeys(properties);
             var ignored = new LinkedHashSet<>(DEFAULT_IGNORED);
             String extra = properties.getProperty("ignore.directories", "");
             Arrays.stream(extra.split(",")).map(String::trim).filter(s -> !s.isEmpty()).forEach(ignored::add);
@@ -97,6 +100,14 @@ public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disable
             catch (DateTimeParseException e) { throw new IllegalArgumentException(key + " 到期日必须是 YYYY-MM-DD"); }
         }
         return result;
+    }
+
+    private static void validateKeys(Properties properties) {
+        var unknown = new LinkedHashSet<String>();
+        for (String key : properties.stringPropertyNames()) {
+            if (!KNOWN_KEYS.contains(key) && !key.startsWith("waiver.")) unknown.add(key);
+        }
+        if (!unknown.isEmpty()) throw new IllegalArgumentException("包含未知配置键: " + unknown);
     }
 
     private static int integer(Properties p, String name, int fallback) {

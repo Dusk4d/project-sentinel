@@ -66,6 +66,17 @@ final class AnalyzerConfigTest {
         assertTrue(waiver.getMessage().contains("未知规则 ID"));
     }
 
+    @Test void rejectsUnknownConfigurationKeysAcrossScopes() throws Exception {
+        Path project = Files.createDirectory(root.resolve("project"));
+        Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "scan.maxFile=1000\n");
+        Files.writeString(project.resolve(AnalyzerConfig.FILE_NAME), "todo.warningThreshold=10\n");
+
+        IOException error = assertThrows(IOException.class, () -> AnalyzerConfig.loadScopes(root, project));
+
+        assertTrue(error.getMessage().contains("未知配置键"));
+        assertTrue(error.getMessage().contains("scan.maxFile"));
+    }
+
     @Test void activeWaiverPreservesFindingButRemovesDeduction() throws Exception {
         Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "waiver.build.manifest=2999-12-31|alice|legacy migration\n");
         var profile = new ProjectAnalyzer().analyze(root);
