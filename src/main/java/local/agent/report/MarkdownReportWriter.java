@@ -24,6 +24,8 @@ public final class MarkdownReportWriter {
                     .append("   - 规则：`").append(f.ruleId()).append("`\n")
                     .append("   - 证据：").append(f.evidence()).append("\n")
                     .append("   - 建议：").append(f.action()).append("\n");
+            if (f.waived()) out.append("   - 豁免：负责人 ").append(f.waiver().owner()).append("，到期 ")
+                    .append(f.waiver().expiresOn()).append("，原因：").append(f.waiver().reason()).append("\n");
         }
         out.append("\n## 优先行动\n\n");
         var actions = new ActionPlanner().plan(p);

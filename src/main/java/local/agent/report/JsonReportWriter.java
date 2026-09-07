@@ -36,7 +36,12 @@ public final class JsonReportWriter {
                     .append("\"category\": ").append(quote(f.category())).append(", ")
                     .append("\"message\": ").append(quote(f.message())).append(", ")
                     .append("\"evidence\": ").append(quote(f.evidence())).append(", ")
-                    .append("\"action\": ").append(quote(f.action())).append('}');
+                    .append("\"action\": ").append(quote(f.action())).append(", ")
+                    .append("\"waived\": ").append(f.waived());
+            if (f.waived()) out.append(", \"waiver\": {\"expiresOn\": ").append(quote(f.waiver().expiresOn().toString()))
+                    .append(", \"owner\": ").append(quote(f.waiver().owner())).append(", \"reason\": ")
+                    .append(quote(f.waiver().reason())).append('}');
+            out.append('}');
         }
         if (!profile.findings().isEmpty()) out.append('\n').append("  ");
         return out.append("]\n}\n").toString();

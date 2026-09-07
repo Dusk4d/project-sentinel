@@ -25,7 +25,7 @@ public record ProjectProfile(
     }
 
     public int healthScore() {
-        int deductions = findings.stream().mapToInt(f -> scoreWeights.deduction(f.severity())).sum();
+        int deductions = findings.stream().filter(f -> !f.waived()).mapToInt(f -> scoreWeights.deduction(f.severity())).sum();
         return Math.max(0, 100 - deductions);
     }
 }

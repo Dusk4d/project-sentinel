@@ -53,4 +53,24 @@ final class AnalyzerConfigTest {
         Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "score.high=5\nscore.medium=20\nscore.low=1\n");
         assertThrows(IOException.class, () -> new ProjectAnalyzer().analyze(root));
     }
+
+    @Test void activeWaiverPreservesFindingButRemovesDeduction() throws Exception {
+        Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "waiver.build.manifest=2999-12-31|alice|legacy migration\n");
+        var profile = new ProjectAnalyzer().analyze(root);
+        var finding = profile.findings().stream().filter(f -> f.ruleId().equals("build.manifest")).findFirst().orElseThrow();
+        assertTrue(finding.waived());
+        assertEquals("alice", finding.waiver().owner());
+        assertEquals(25, profile.healthScore() - new ProjectAnalyzer().analyze(withoutWaiver()).healthScore());
+    }
+
+    @Test void expiredWaiverDoesNotSuppressDeduction() throws Exception {
+        Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "waiver.build.manifest=2000-01-01|alice|expired\n");
+        var profile = new ProjectAnalyzer().analyze(root);
+        assertFalse(profile.findings().stream().filter(f -> f.ruleId().equals("build.manifest")).findFirst().orElseThrow().waived());
+    }
+
+    private Path withoutWaiver() throws Exception {
+        Files.deleteIfExists(root.resolve(AnalyzerConfig.FILE_NAME));
+        return root;
+    }
 }

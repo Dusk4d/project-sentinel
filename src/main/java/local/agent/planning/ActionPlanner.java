@@ -11,6 +11,7 @@ public final class ActionPlanner {
     public List<ActionItem> plan(ProjectProfile profile) {
         var actionable = profile.findings().stream()
                 .filter(f -> f.severity() != Severity.INFO)
+                .filter(f -> !f.waived())
                 .sorted(Comparator.comparingInt((local.agent.analysis.Finding f) -> profile.scoreWeights().deduction(f.severity())).reversed()
                         .thenComparing(local.agent.analysis.Finding::category)
                         .thenComparing(local.agent.analysis.Finding::message))

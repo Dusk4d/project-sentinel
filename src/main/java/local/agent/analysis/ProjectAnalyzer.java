@@ -122,7 +122,9 @@ public final class ProjectAnalyzer {
     }
 
     private void add(AnalyzerConfig config, List<Finding> findings, Finding finding) {
-        if (config.enabled(finding.ruleId())) findings.add(finding);
+        if (!config.enabled(finding.ruleId())) return;
+        var waiver = config.activeWaiver(finding.ruleId());
+        findings.add(waiver == null ? finding : finding.withWaiver(waiver));
     }
 
     private boolean hasAny(Path root, String... names) {

@@ -30,6 +30,9 @@ public final class HtmlReportWriter {
                     .append("<h3>").append(escape(f.message())).append("</h3><code>").append(escape(f.ruleId()))
                     .append("</code><p>证据：").append(escape(f.evidence())).append("</p><p>建议：")
                     .append(escape(f.action())).append("</p></article>");
+            if (f.waived()) out.insert(out.length() - "</article>".length(), "<p><strong>已豁免至 "
+                    + escape(f.waiver().expiresOn().toString()) + "</strong> · " + escape(f.waiver().owner())
+                    + " · " + escape(f.waiver().reason()) + "</p>");
         }
         out.append("<h2>优先行动</h2>");
         var actions = new ActionPlanner().plan(p);
