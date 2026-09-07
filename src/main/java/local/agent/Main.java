@@ -21,8 +21,7 @@ import local.agent.report.HtmlReportStore;
 import local.agent.portfolio.PortfolioRunService;
 import local.agent.verification.BuildVerifier;
 import java.time.Duration;
-import local.agent.report.AtomicTextStore;
-import local.agent.report.BuildVerificationJsonWriter;
+import local.agent.report.BuildEvidenceStore;
 
 public final class Main {
     public static void main(String[] args) {
@@ -256,14 +255,14 @@ public final class Main {
         try {
             var daily = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
             var build = new BuildVerifier().verify(project, Duration.ofSeconds(timeoutSeconds));
-            var store = new AtomicTextStore();
-            Path buildJson = store.write(stateDirectory.resolve("latest-build.json"), new BuildVerificationJsonWriter().render(build));
-            Path buildLog = store.write(stateDirectory.resolve("latest-build.log"), build.output());
+            var evidence = new BuildEvidenceStore().save(stateDirectory, build);
             System.out.print(daily.trend());
             printDailyGate(daily);
             System.out.println("构建状态: " + build.status() + "，耗时: " + build.duration().toMillis() + " ms");
-            System.out.println("构建 JSON: " + buildJson);
-            System.out.println("构建日志: " + buildLog);
+            System.out.println("构建 JSON: " + evidence.latestJson());
+            System.out.println("构建日志: " + evidence.latestLog());
+            System.out.println("构建历史: " + evidence.history());
+            System.out.println("归档日志: " + evidence.archivedLog());
             if (!build.passed()) System.exit(build.status() == local.agent.verification.BuildVerification.Status.TIMED_OUT ? 5 : 4);
             if (!daily.passed()) System.exit(3);
         } catch (IllegalArgumentException e) {

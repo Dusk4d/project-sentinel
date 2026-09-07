@@ -64,7 +64,7 @@ java -jar target/workspace-agent-0.2.0.jar --daily D:\path\to\project D:\path\to
 # 显式执行项目测试；默认超时 120 秒，最大 1800 秒
 java -jar target/workspace-agent-0.2.0.jar --verify-build D:\path\to\project 120
 
-# 显式执行“静态日报 + 真实构建”，保存 latest-build.json 和 latest-build.log
+# 显式执行“静态日报 + 真实构建”，保存最新与历史构建证据
 java -jar target/workspace-agent-0.2.0.jar --daily-verify D:\path\to\project D:\path\to\agent-state 80 120 5
 ```
 
@@ -76,7 +76,7 @@ java -jar target/workspace-agent-0.2.0.jar --daily-verify D:\path\to\project D:\
 
 `--verify-build` 会执行项目代码，只应对可信项目显式调用；默认扫描和每日健康检查仍为静态只读分析。构建失败返回 `4`，超时返回 `5`，输出最多保留 64 KiB。
 
-`--daily-verify` 同样只应对可信项目显式调用。它保留所有静态日报产物，并原子更新 `latest-build.json` 与 `latest-build.log`；静态门禁或构建任一失败都会返回非零退出码。
+`--daily-verify` 同样只应对可信项目显式调用。它保留所有静态日报产物，原子更新 `latest-build.json` 与 `latest-build.log`，向 `build-history.jsonl` 追加不含大段输出的结构化摘要，并在 `build-logs` 中保留每次完整日志。静态门禁或构建任一失败都会返回非零退出码。
 
 日检可选的“最大允许降幅”会将当前分数与上次快照比较。即使当前分数仍高于绝对最低线，超过允许降幅也会以退出码 `3` 阻断；首次运行只建立基线。
 
