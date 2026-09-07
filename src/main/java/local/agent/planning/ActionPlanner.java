@@ -18,7 +18,7 @@ public final class ActionPlanner {
         var result = new ArrayList<ActionItem>();
         for (int i = 0; i < actionable.size(); i++) {
             var f = actionable.get(i);
-            result.add(new ActionItem(i + 1, f.severity(), f.category(), f.action(), f.message() + "；证据：" + f.evidence(), weight(f.severity())));
+            result.add(new ActionItem(i + 1, f.ruleId(), f.severity(), f.category(), f.action(), f.message() + "；证据：" + f.evidence(), weight(f.severity())));
         }
         return List.copyOf(result);
     }

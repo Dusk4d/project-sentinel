@@ -28,6 +28,7 @@ public final class JsonReportWriter {
             Finding f = profile.findings().get(i);
             if (i > 0) out.append(',');
             out.append("\n    {")
+                    .append("\"ruleId\": ").append(quote(f.ruleId())).append(", ")
                     .append("\"severity\": ").append(quote(f.severity().name())).append(", ")
                     .append("\"category\": ").append(quote(f.category())).append(", ")
                     .append("\"message\": ").append(quote(f.message())).append(", ")

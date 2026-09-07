@@ -13,6 +13,7 @@ public final class ActionPlanWriter {
         for (var item : actions) {
             out.append(item.rank()).append(". **[").append(item.severity().label()).append("] ")
                     .append(item.action()).append("**\n")
+                    .append("   - 规则：`").append(item.ruleId()).append("`\n")
                     .append("   - 原因：").append(item.rationale()).append("\n")
                     .append("   - 单项预计恢复：最多 ").append(item.potentialScoreGain()).append(" 分\n");
         }

@@ -31,4 +31,12 @@ final class AnalyzerConfigTest {
         IOException error = assertThrows(IOException.class, () -> new ProjectAnalyzer().analyze(root));
         assertTrue(error.getMessage().contains("配置文件无效"));
     }
+
+    @Test void disablesOnlyExplicitRuleIds() throws Exception {
+        Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "rules.disabled=docs.readme,legal.license\n");
+        var profile = new ProjectAnalyzer().analyze(root);
+        assertFalse(profile.findings().stream().anyMatch(f -> f.ruleId().equals("docs.readme")));
+        assertFalse(profile.findings().stream().anyMatch(f -> f.ruleId().equals("legal.license")));
+        assertTrue(profile.findings().stream().anyMatch(f -> f.ruleId().equals("build.manifest")));
+    }
 }

@@ -89,14 +89,15 @@ ignore.directories=generated,coverage,reports
 scan.maxFiles=10000
 scan.maxTextBytes=262144
 todo.warningThreshold=20
+rules.disabled=legal.license,tests.ratio
 ```
 
-忽略项只能是目录名，不能使用路径或 `..`。扫描上限和阈值会做范围校验，错误配置会令任务失败并返回退出码 `1`，避免静默产生不完整报告。
+忽略项只能是目录名，不能使用路径或 `..`。规则抑制使用报告中的稳定 `ruleId`，例如 `legal.license`；不要依赖中文文案。扫描上限、阈值和规则 ID 会做校验，错误配置会令任务失败并返回退出码 `1`，避免静默产生不完整报告。
 
 ## 路线图
 
 - 增加带审批策略的文件创建与补丁工具。
-- 支持按规则启用/禁用检查和自定义评分权重。
+- 支持自定义评分权重和带理由、有效期的规则豁免。
 - 增加任务历史、记忆和可恢复执行状态。
 - 接入可选的本地模型或兼容 OpenAI 协议的模型。
 - 增加更完善的自动化测试和打包发布流程。

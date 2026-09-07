@@ -21,6 +21,7 @@ public final class MarkdownReportWriter {
         for (var f : p.findings()) {
             out.append(index++).append(". **[").append(f.severity().label()).append("] ")
                     .append(f.category()).append("**：").append(f.message()).append("\n")
+                    .append("   - 规则：`").append(f.ruleId()).append("`\n")
                     .append("   - 证据：").append(f.evidence()).append("\n")
                     .append("   - 建议：").append(f.action()).append("\n");
         }
