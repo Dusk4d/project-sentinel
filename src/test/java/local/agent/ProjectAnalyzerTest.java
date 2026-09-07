@@ -8,6 +8,10 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import local.agent.analysis.RuleCatalog;
+import local.agent.analysis.ScoreWeights;
+import local.agent.config.AnalyzerConfig;
+import java.util.Set;
+import java.util.Map;
 
 final class ProjectAnalyzerTest {
     @TempDir Path root;
@@ -71,5 +75,19 @@ final class ProjectAnalyzerTest {
         var profile = new ProjectAnalyzer().analyze(project);
         assertEquals(0, profile.sourceFileCount());
         assertEquals(0, profile.todoCount());
+    }
+
+    @Test void reportsFileLimitOnlyAfterProvingAnAdditionalFileExists() throws Exception {
+        var config = new AnalyzerConfig(Set.of(), Set.of(), 100, 262_144, 20, ScoreWeights.DEFAULT, Map.of());
+        for (int i = 0; i < 100; i++) Files.writeString(root.resolve("file-" + i + ".txt"), "");
+        var exact = new ProjectAnalyzer().analyze(root, config);
+        assertEquals(100, exact.fileCount());
+        assertFalse(exact.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.SCAN_FILE_LIMIT)));
+
+        Files.writeString(root.resolve("file-extra.txt"), "");
+        var overflow = new ProjectAnalyzer().analyze(root, config);
+        assertEquals(100, overflow.fileCount());
+        var finding = overflow.findings().stream().filter(f -> f.ruleId().equals(RuleCatalog.SCAN_FILE_LIMIT)).findFirst().orElseThrow();
+        assertTrue(finding.evidence().contains("至少存在 101 个"));
     }
 }

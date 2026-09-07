@@ -28,7 +28,7 @@ public final class RuleCatalog {
             new RuleDefinition(TESTS_MISSING, "测试", "存在源码但没有识别到测试文件"),
             new RuleDefinition(TESTS_RATIO, "测试", "测试文件数少于源码文件数的五分之一"),
             new RuleDefinition(MAINTENANCE_TODOS, "维护", "TODO/FIXME/HACK 数量超过配置阈值；未超过时输出 INFO"),
-            new RuleDefinition(SCAN_FILE_LIMIT, "规模", "扫描达到配置的文件数上限")
+            new RuleDefinition(SCAN_FILE_LIMIT, "规模", "确认符合条件的文件数超过配置上限")
     );
     public static final Set<String> KNOWN_IDS = DEFINITIONS.stream().map(RuleDefinition::id)
             .collect(Collectors.toUnmodifiableSet());

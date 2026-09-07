@@ -28,9 +28,11 @@ public final class ProjectAnalyzer {
         try (var stream = Files.walk(normalized)) {
             stream.filter(p -> isSafeRegularFile(normalized, p))
                     .filter(p -> !isIgnored(normalized.relativize(p), config))
-                    .limit(config.maxFiles())
+                    .limit((long) config.maxFiles() + 1)
                     .forEach(files::add);
         }
+        boolean truncated = files.size() > config.maxFiles();
+        if (truncated) files.remove(files.size() - 1);
 
         boolean readme = files.stream().anyMatch(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).startsWith("readme"));
         boolean build = hasAny(normalized, "pom.xml", "build.gradle", "build.gradle.kts", "package.json", "pyproject.toml", "Cargo.toml", "go.mod");
@@ -60,7 +62,7 @@ public final class ProjectAnalyzer {
         String todoEvidence = "发现 TODO/FIXME/HACK 共 " + todos + " 处" + evidenceLocations(todoScan.locations());
         if (todos > config.todoWarningThreshold()) add(config, findings, new Finding(RuleCatalog.MAINTENANCE_TODOS, Severity.MEDIUM, "维护", "待办标记较多，可能存在积压", todoEvidence + "，阈值 " + config.todoWarningThreshold(), "分类并为高价值待办设定负责人和完成条件"));
         else add(config, findings, new Finding(RuleCatalog.MAINTENANCE_TODOS, Severity.INFO, "维护", "待办标记数量可控", todoEvidence, "持续在每日报告中观察趋势"));
-        if (files.size() >= config.maxFiles()) add(config, findings, new Finding(RuleCatalog.SCAN_FILE_LIMIT, Severity.MEDIUM, "规模", "扫描达到 " + config.maxFiles() + " 文件上限", "分析结果可能不完整", "配置更精确的忽略目录或拆分项目"));
+        if (truncated) add(config, findings, new Finding(RuleCatalog.SCAN_FILE_LIMIT, Severity.MEDIUM, "规模", "扫描超过 " + config.maxFiles() + " 文件上限", "已确认至少存在 " + ((long) config.maxFiles() + 1) + " 个符合条件的文件，结果只包含前 " + config.maxFiles() + " 个", "配置更精确的忽略目录或拆分项目"));
 
         return new ProjectProfile(normalized, normalized.getFileName().toString(), ecosystem, files.size(), sourceCount,
                 testCount, todos, readme, build, gitIgnore, config.scoreWeights(), List.copyOf(findings));
