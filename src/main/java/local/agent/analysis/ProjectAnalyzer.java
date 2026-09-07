@@ -18,7 +18,12 @@ public final class ProjectAnalyzer {
     public ProjectProfile analyze(Path root) throws IOException {
         if (!Files.isDirectory(root)) throw new IOException("项目目录不存在: " + root.toAbsolutePath().normalize());
         Path normalized = root.toRealPath();
-        AnalyzerConfig config = AnalyzerConfig.load(normalized);
+        return analyze(normalized, AnalyzerConfig.load(normalized));
+    }
+
+    public ProjectProfile analyze(Path root, AnalyzerConfig config) throws IOException {
+        if (!Files.isDirectory(root)) throw new IOException("项目目录不存在: " + root.toAbsolutePath().normalize());
+        Path normalized = root.toRealPath();
         var files = new ArrayList<Path>();
         try (var stream = Files.walk(normalized)) {
             stream.filter(p -> isSafeRegularFile(normalized, p))

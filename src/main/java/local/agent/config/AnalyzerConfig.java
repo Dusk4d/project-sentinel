@@ -37,10 +37,19 @@ public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disable
     public static AnalyzerConfig defaults() { return new AnalyzerConfig(DEFAULT_IGNORED, Set.of(), 10_000, 256 * 1024L, 20, ScoreWeights.DEFAULT, Map.of()); }
 
     public static AnalyzerConfig load(Path projectRoot) throws IOException {
-        Path file = projectRoot.resolve(FILE_NAME);
-        if (!Files.isRegularFile(file)) return defaults();
+        return loadScopes(projectRoot);
+    }
+
+    public static AnalyzerConfig loadScopes(Path... roots) throws IOException {
         var properties = new Properties();
-        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) { properties.load(reader); }
+        var loadedFiles = new java.util.ArrayList<Path>();
+        for (Path root : roots) {
+            Path file = root.resolve(FILE_NAME);
+            if (!Files.isRegularFile(file) || loadedFiles.contains(file.toAbsolutePath().normalize())) continue;
+            try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) { properties.load(reader); }
+            loadedFiles.add(file.toAbsolutePath().normalize());
+        }
+        if (loadedFiles.isEmpty()) return defaults();
         try {
             var ignored = new LinkedHashSet<>(DEFAULT_IGNORED);
             String extra = properties.getProperty("ignore.directories", "");
@@ -54,7 +63,7 @@ public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disable
                             integer(properties, "score.medium", 12), integer(properties, "score.low", 5)),
                     parseWaivers(properties));
         } catch (IllegalArgumentException e) {
-            throw new IOException("配置文件无效 " + file + ": " + e.getMessage(), e);
+            throw new IOException("配置文件无效 " + loadedFiles + ": " + e.getMessage(), e);
         }
     }
 

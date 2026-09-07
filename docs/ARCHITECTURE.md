@@ -18,6 +18,8 @@
 
 `RuleWaiver` 绑定稳定规则 ID、负责人、原因和到期日。有效豁免仍保留在 Finding 和所有报告格式中，但不参与扣分与行动队列；过期豁免自动失效，原始风险恢复正常行为。
 
+组合分析通过 `AnalyzerConfig.loadScopes(workspace, project)` 分层加载配置。Java Properties 后加载层覆盖前一层，因此项目可以覆盖工作区默认标量与规则配置；单项目分析只建立一个配置作用域。
+
 `HtmlReportWriter` 生成不依赖脚本、字体或 CDN 的离线单文件看板。所有来自项目的文本先进行 HTML 实体转义；`HtmlReportStore` 与其他状态写入一样使用同目录临时文件和原子替换。
 
 `AtomicTextStore` 统一稳定输出文件的写入语义。每日运行只替换 Agent 状态目录内的 `latest.html` 和 `latest.json`，时间戳 Markdown 与 TSV 历史仅追加，不执行自动清理。
