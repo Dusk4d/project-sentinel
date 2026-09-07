@@ -30,6 +30,7 @@ import local.agent.config.AnalyzerConfig;
 import local.agent.report.ConfigSummaryWriter;
 import local.agent.report.RuleCatalogWriter;
 import local.agent.report.ActionPlanJsonWriter;
+import local.agent.report.DailyRunManifestStore;
 
 public final class Main {
     public static void main(String[] args) {
@@ -294,6 +295,7 @@ public final class Main {
             var daily = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
             var build = new BuildVerifier().verify(project, Duration.ofSeconds(timeoutSeconds));
             var evidence = new BuildEvidenceStore().save(stateDirectory, build);
+            Path manifest = new DailyRunManifestStore().save(stateDirectory, "daily-verify", daily, build, evidence);
             System.out.print(daily.trend());
             printDailyGate(daily);
             System.out.println("构建状态: " + build.status() + "，耗时: " + build.duration().toMillis() + " ms");
@@ -302,6 +304,7 @@ public final class Main {
             System.out.println("构建历史: " + evidence.history());
             System.out.println("归档日志: " + evidence.archivedLog());
             System.out.println("最新行动计划: " + daily.latestPlanJson());
+            System.out.println("运行完成清单: " + manifest);
             if (!build.passed()) System.exit(build.status() == local.agent.verification.BuildVerification.Status.TIMED_OUT ? 5 : 4);
             if (!daily.passed()) System.exit(3);
         } catch (IllegalArgumentException e) {
@@ -316,11 +319,13 @@ public final class Main {
     private static void runDaily(Path project, Path stateDirectory, int minimumScore, int maximumDrop) {
         try (var ignored = StateRunLock.acquire(stateDirectory, "daily")) {
             var result = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
+            Path manifest = new DailyRunManifestStore().save(stateDirectory, "daily", result, null, null);
             System.out.print(result.trend());
             System.out.println("报告: " + result.report());
             System.out.println("最新 HTML: " + result.latestHtml());
             System.out.println("最新 JSON: " + result.latestJson());
             System.out.println("最新行动计划: " + result.latestPlanJson());
+            System.out.println("运行完成清单: " + manifest);
             System.out.println("质量门禁: " + (result.passed() ? "通过" : "未通过")
                     + "（当前 " + result.score() + "，最低 " + result.minimumScore() + "）");
             printRegressionGate(result);
