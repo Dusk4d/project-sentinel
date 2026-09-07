@@ -87,7 +87,7 @@ java -jar target/workspace-agent-0.2.0.jar --list-rules
 
 `--daily` 退出码约定：`0` 表示通过，`1` 表示运行故障，`2` 表示参数错误，`3` 表示质量门禁失败，`4` 表示构建失败，`5` 表示构建超时，`6` 表示同一状态目录已有任务运行。该约定便于任务计划程序和 CI 可靠判断结果。
 
-每次 `--daily` 会对项目只执行一次分析，在状态目录中原子更新 `latest.html`、`latest.json` 与 `latest-plan.json`，追加 `history.tsv`，并在 `reports` 子目录保存带时间戳的 Markdown。健康报告、快照和行动计划因此来自同一份分析结果；历史报告不会被自动删除。
+每次 `--daily` 会对项目只执行一次分析，在状态目录中原子更新 `latest.html`、`latest.json` 与 `latest-plan.json`，追加 `history.tsv`，并在 `reports` 子目录保存带毫秒时间戳和唯一后缀的 Markdown。健康报告、快照和行动计划因此来自同一份分析结果；快速连续执行也不会覆盖同时刻报告，历史报告不会被自动删除。
 
 `--daily`、`--daily-verify` 和 `--portfolio-daily` 会对各自的状态目录持有跨进程锁。重叠启动的后来任务会立即返回 `6`，不会等待或覆盖前一次历史。锁文件本身会保留，是否正在运行由操作系统文件锁判定，不要仅凭文件存在与否判断。
 使用 `--state-status` 可安全判断 `RUNNING` 或 `IDLE`；`IDLE` 时显示的元数据代表上一次持锁任务，不表示该 PID 仍在运行。
