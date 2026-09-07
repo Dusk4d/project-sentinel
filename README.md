@@ -42,6 +42,9 @@ java -jar target/workspace-agent-0.2.0.jar --plan D:\path\to\project
 # 以原子写入方式保存带时间戳的报告
 java -cp target/classes local.agent.Main --report D:\path\to\project D:\path\to\reports
 
+# 生成无需服务器、可直接用浏览器打开的单文件 HTML 看板
+java -jar target/workspace-agent-0.2.0.jar --report-html D:\path\to\project D:\path\to\dashboard.html
+
 # 扫描一个目录下可识别的多个项目，按健康分排序
 java -cp target/classes local.agent.Main --portfolio D:\path\to\workspace
 

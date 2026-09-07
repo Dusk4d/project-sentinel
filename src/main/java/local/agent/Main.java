@@ -17,6 +17,7 @@ import local.agent.history.TrendReporter;
 import local.agent.daily.DailyRunService;
 import local.agent.report.ActionPlanWriter;
 import local.agent.cli.CommandLine;
+import local.agent.report.HtmlReportStore;
 
 public final class Main {
     public static void main(String[] args) {
@@ -50,6 +51,10 @@ public final class Main {
         }
         if (args.length >= 3 && args[0].equals("--report")) {
             runReport(Path.of(args[1]), Path.of(args[2]));
+            return;
+        }
+        if (args.length >= 3 && args[0].equals("--report-html")) {
+            runHtmlReport(Path.of(args[1]), Path.of(args[2]));
             return;
         }
         if (args.length >= 2 && args[0].equals("--portfolio")) {
@@ -122,6 +127,16 @@ public final class Main {
             System.out.println("报告已保存: " + saved);
         } catch (Exception e) {
             System.err.println("报告生成失败: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    private static void runHtmlReport(Path project, Path outputFile) {
+        try {
+            Path saved = new HtmlReportStore().save(new ProjectAnalyzer().analyze(project), outputFile);
+            System.out.println("HTML 报告已保存: " + saved);
+        } catch (Exception e) {
+            System.err.println("HTML 报告生成失败: " + e.getMessage());
             System.exit(1);
         }
     }
