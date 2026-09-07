@@ -25,6 +25,7 @@ import local.agent.report.BuildEvidenceStore;
 import local.agent.state.RunAlreadyActiveException;
 import local.agent.state.StateRunLock;
 import local.agent.state.RunStatusInspector;
+import local.agent.config.ConfigInitializer;
 
 public final class Main {
     public static void main(String[] args) {
@@ -101,6 +102,10 @@ public final class Main {
         }
         if (args.length >= 2 && args[0].equals("--state-status")) {
             runStateStatus(Path.of(args[1]));
+            return;
+        }
+        if (args.length >= 2 && args[0].equals("--init-config")) {
+            runInitConfig(Path.of(args[1]));
             return;
         }
         Path workspace = args.length == 0 ? Path.of(".") : Path.of(args[0]);
@@ -321,6 +326,15 @@ public final class Main {
             }
         } catch (Exception e) {
             System.err.println("状态查询失败: " + e.getMessage()); System.exit(1);
+        }
+    }
+
+    private static void runInitConfig(Path project) {
+        try {
+            var result = new ConfigInitializer().initialize(project);
+            System.out.println(result.created() ? "配置已创建: " + result.path() : "配置已存在，未修改: " + result.path());
+        } catch (Exception e) {
+            System.err.println("配置初始化失败: " + e.getMessage()); System.exit(1);
         }
     }
 

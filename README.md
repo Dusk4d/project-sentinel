@@ -69,6 +69,9 @@ java -jar target/workspace-agent-0.2.0.jar --daily-verify D:\path\to\project D:\
 
 # 查询状态目录当前是否被任务占用，并显示进程、开始时间和操作类型
 java -jar target/workspace-agent-0.2.0.jar --state-status D:\path\to\agent-state
+
+# 创建带注释的项目配置模板；已存在时绝不覆盖
+java -jar target/workspace-agent-0.2.0.jar --init-config D:\path\to\project
 ```
 
 使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项或缺少参数会输出帮助并返回退出码 `2`。
@@ -124,6 +127,8 @@ score.medium=12
 score.low=5
 waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 ```
+
+可先运行 `--init-config`生成可直接解析的完整示例。该命令使用“仅当目标不存在时创建”语义；重复运行只会报告已存在，不会更改现有内容。
 
 忽略项只能是目录名，不能使用路径或 `..`。规则抑制使用报告中的稳定 `ruleId`，例如 `legal.license`；不要依赖中文文案。长期使用时优先采用 `waiver.<ruleId>=到期日|负责人|原因`：有效豁免保留发现但不扣分，到期后自动恢复扣分。评分权重限制为 0～100，且必须满足高风险 ≥ 中风险 ≥ 低风险。错误配置会令任务失败并返回退出码 `1`。
 
