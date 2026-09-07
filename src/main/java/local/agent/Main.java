@@ -21,6 +21,8 @@ import local.agent.report.HtmlReportStore;
 import local.agent.portfolio.PortfolioRunService;
 import local.agent.verification.BuildVerifier;
 import java.time.Duration;
+import local.agent.report.AtomicTextStore;
+import local.agent.report.BuildVerificationJsonWriter;
 
 public final class Main {
     public static void main(String[] args) {
@@ -85,6 +87,12 @@ public final class Main {
         if (args.length >= 2 && args[0].equals("--verify-build")) {
             int seconds = args.length >= 3 ? parsePositiveSeconds(args[2]) : 120;
             runBuildVerification(Path.of(args[1]), seconds);
+            return;
+        }
+        if (args.length >= 3 && args[0].equals("--daily-verify")) {
+            int minimum = args.length >= 4 ? parseMinimumScore(args[3]) : 70;
+            int seconds = args.length >= 5 ? parsePositiveSeconds(args[4]) : 120;
+            runDailyVerify(Path.of(args[1]), Path.of(args[2]), minimum, seconds);
             return;
         }
         Path workspace = args.length == 0 ? Path.of(".") : Path.of(args[0]);
@@ -229,6 +237,27 @@ public final class Main {
             System.err.println("参数错误: " + e.getMessage()); System.exit(2);
         } catch (Exception e) {
             System.err.println("构建验证失败: " + e.getMessage()); System.exit(1);
+        }
+    }
+
+    private static void runDailyVerify(Path project, Path stateDirectory, int minimumScore, int timeoutSeconds) {
+        try {
+            var daily = new DailyRunService().run(project, stateDirectory, minimumScore);
+            var build = new BuildVerifier().verify(project, Duration.ofSeconds(timeoutSeconds));
+            var store = new AtomicTextStore();
+            Path buildJson = store.write(stateDirectory.resolve("latest-build.json"), new BuildVerificationJsonWriter().render(build));
+            Path buildLog = store.write(stateDirectory.resolve("latest-build.log"), build.output());
+            System.out.print(daily.trend());
+            System.out.println("静态健康分: " + daily.score() + "，门禁: " + (daily.passed() ? "通过" : "未通过"));
+            System.out.println("构建状态: " + build.status() + "，耗时: " + build.duration().toMillis() + " ms");
+            System.out.println("构建 JSON: " + buildJson);
+            System.out.println("构建日志: " + buildLog);
+            if (!build.passed()) System.exit(build.status() == local.agent.verification.BuildVerification.Status.TIMED_OUT ? 5 : 4);
+            if (!daily.passed()) System.exit(3);
+        } catch (IllegalArgumentException e) {
+            System.err.println("参数错误: " + e.getMessage()); System.exit(2);
+        } catch (Exception e) {
+            System.err.println("每日构建验证失败: " + e.getMessage()); System.exit(1);
         }
     }
 
