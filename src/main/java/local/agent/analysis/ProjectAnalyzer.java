@@ -2,8 +2,11 @@ package local.agent.analysis;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -24,13 +27,7 @@ public final class ProjectAnalyzer {
     public ProjectProfile analyze(Path root, AnalyzerConfig config) throws IOException {
         if (!Files.isDirectory(root)) throw new IOException("项目目录不存在: " + root.toAbsolutePath().normalize());
         Path normalized = root.toRealPath();
-        var files = new ArrayList<Path>();
-        try (var stream = Files.walk(normalized)) {
-            stream.filter(p -> isSafeRegularFile(normalized, p))
-                    .filter(p -> !isIgnored(normalized.relativize(p), config))
-                    .limit((long) config.maxFiles() + 1)
-                    .forEach(files::add);
-        }
+        var files = scanFiles(normalized, config);
         boolean truncated = files.size() > config.maxFiles();
         if (truncated) files.remove(files.size() - 1);
 
@@ -71,6 +68,32 @@ public final class ProjectAnalyzer {
     private boolean isIgnored(Path relative, AnalyzerConfig config) {
         for (Path part : relative) if (config.ignoredDirectories().contains(part.toString())) return true;
         return false;
+    }
+
+    private ArrayList<Path> scanFiles(Path root, AnalyzerConfig config) throws IOException {
+        var files = new ArrayList<Path>();
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attributes) {
+                if (!directory.equals(root) && isIgnored(root.relativize(directory), config)) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                try {
+                    return directory.toRealPath().startsWith(root) ? FileVisitResult.CONTINUE : FileVisitResult.SKIP_SUBTREE;
+                } catch (IOException e) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+            }
+
+            @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
+                if (isSafeRegularFile(root, file)) files.add(file);
+                return files.size() > config.maxFiles() ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+            }
+
+            @Override public FileVisitResult visitFileFailed(Path file, IOException exception) {
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return files;
     }
 
     private boolean isSafeRegularFile(Path root, Path candidate) {

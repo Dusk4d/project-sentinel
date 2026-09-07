@@ -90,4 +90,17 @@ final class ProjectAnalyzerTest {
         var finding = overflow.findings().stream().filter(f -> f.ruleId().equals(RuleCatalog.SCAN_FILE_LIMIT)).findFirst().orElseThrow();
         assertTrue(finding.evidence().contains("至少存在 101 个"));
     }
+
+    @Test void prunesIgnoredDirectoryBeforeItCanConsumeTheFileBudget() throws Exception {
+        Path ignored = Files.createDirectories(root.resolve("node_modules/dependency"));
+        for (int i = 0; i < 150; i++) Files.writeString(ignored.resolve("generated-" + i + ".js"), "// TODO ignored");
+        Files.writeString(root.resolve("pom.xml"), "<project/>");
+        var config = new AnalyzerConfig(Set.of("node_modules"), Set.of(), 100, 262_144, 20, ScoreWeights.DEFAULT, Map.of());
+
+        var profile = new ProjectAnalyzer().analyze(root, config);
+
+        assertEquals(1, profile.fileCount());
+        assertEquals(0, profile.todoCount());
+        assertFalse(profile.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.SCAN_FILE_LIMIT)));
+    }
 }
