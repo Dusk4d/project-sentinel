@@ -29,6 +29,7 @@ import local.agent.config.ConfigInitializer;
 import local.agent.config.AnalyzerConfig;
 import local.agent.report.ConfigSummaryWriter;
 import local.agent.report.RuleCatalogWriter;
+import local.agent.report.ActionPlanJsonWriter;
 
 public final class Main {
     public static void main(String[] args) {
@@ -58,6 +59,10 @@ public final class Main {
         }
         if (args.length >= 2 && args[0].equals("--plan")) {
             runPlan(Path.of(args[1]));
+            return;
+        }
+        if (args.length >= 2 && args[0].equals("--plan-json")) {
+            runPlanJson(Path.of(args[1]));
             return;
         }
         if (args.length >= 3 && args[0].equals("--report")) {
@@ -161,6 +166,14 @@ public final class Main {
         try { System.out.print(new ActionPlanWriter().render(new ProjectAnalyzer().analyze(project))); }
         catch (Exception e) {
             System.err.println("行动规划失败: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    private static void runPlanJson(Path project) {
+        try { System.out.print(new ActionPlanJsonWriter().render(new ProjectAnalyzer().analyze(project))); }
+        catch (Exception e) {
+            System.err.println("JSON 行动规划失败: " + e.getMessage());
             System.exit(1);
         }
     }

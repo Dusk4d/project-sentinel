@@ -12,6 +12,8 @@ CLI 在整个日检编排期间持有 `StateRunLock`，锁粒度是规范化后�
 
 机器接口由 `JsonReportWriter` 提供，当前契约版本为 1。实现不引入运行时 JSON 依赖，并对来自文件系统的字符串执行完整 JSON 转义，避免项目名或证据文本破坏输出结构。
 
+`ActionPlanJsonWriter` 与 Markdown 规划共用同一 `ActionPlanner`，因此排序、豁免过滤和恢复分估算不会在人类与机器接口间分叉。
+
 `AnalyzerConfig` 从项目根目录加载受限配置。额外忽略项只接受单段目录名，扫描文件数、文本大小和待办阈值都有上下界，以防错误配置造成越界访问或无界资源消耗。
 
 每个 `Finding` 都有稳定的小写规则 ID。`rules.disabled` 只在发现加入结果前做精确 ID 匹配，既保留指标采集，也避免依赖本地化文案进行脆弱抑制。

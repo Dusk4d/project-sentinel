@@ -39,6 +39,9 @@ java -jar target/workspace-agent-0.2.0.jar --check-json D:\path\to\project
 # 输出按风险和预计恢复分值排序的行动计划
 java -jar target/workspace-agent-0.2.0.jar --plan D:\path\to\project
 
+# 输出版本化的机器可读行动计划
+java -jar target/workspace-agent-0.2.0.jar --plan-json D:\path\to\project
+
 # 以原子写入方式保存带时间戳的报告
 java -cp target/classes local.agent.Main --report D:\path\to\project D:\path\to\reports
 
@@ -95,7 +98,7 @@ java -jar target/workspace-agent-0.2.0.jar --list-rules
 
 日检可选的“最大允许降幅”会将当前分数与上次快照比较。即使当前分数仍高于绝对最低线，超过允许降幅也会以退出码 `3` 阻断；首次运行只建立基线。
 
-JSON 输出包含 `schemaVersion`。消费者应按版本解析字段，不依赖字段排列顺序。
+JSON 输出包含 `schemaVersion`。消费者应按版本解析字段，不依赖字段排列顺序。`--plan-json` 还包含当前分、行动数、理论可恢复分、预计分以及按优先级排列的行动数组；预计值不代替修复后重新扫描。
 
 运行标准自动化测试：
 

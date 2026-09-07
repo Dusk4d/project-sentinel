@@ -10,6 +10,7 @@ final class CommandLineTest {
         assertTrue(CommandLine.validate(new String[0]).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--check", "project"}).isEmpty());
+        assertTrue(CommandLine.validate(new String[]{"--plan-json", "project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--daily", "project", "state", "80"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--daily", "project", "state", "80", "5"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--daily-verify", "project", "state", "80", "120", "5"}).isEmpty());
