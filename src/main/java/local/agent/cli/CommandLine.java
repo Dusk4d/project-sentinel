@@ -40,6 +40,7 @@ public final class CommandLine {
                   java -jar workspace-agent.jar --daily-verify <项目> <状态目录> [最低分] [超时秒] [最大允许降幅]
                   java -jar workspace-agent.jar --state-status <状态目录>
                   java -jar workspace-agent.jar --init-config <项目>
+                  java -jar workspace-agent.jar --validate-config <项目>
                   java -jar workspace-agent.jar --help
                   java -jar workspace-agent.jar --version
                 """.formatted(VERSION);
@@ -61,6 +62,7 @@ public final class CommandLine {
         result.put("--daily-verify", 3);
         result.put("--state-status", 2);
         result.put("--init-config", 2);
+        result.put("--validate-config", 2);
         return Map.copyOf(result);
     }
 }

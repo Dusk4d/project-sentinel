@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
 import java.util.LinkedHashMap;
+import local.agent.analysis.RuleCatalog;
 
 public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disabledRules, int maxFiles, long maxTextBytes,
                              int todoWarningThreshold, ScoreWeights scoreWeights, Map<String, RuleWaiver> waivers) {
@@ -32,6 +33,12 @@ public record AnalyzerConfig(Set<String> ignoredDirectories, Set<String> disable
             throw new IllegalArgumentException("ignore.directories 只能包含目录名，不能包含路径");
         if (disabledRules.stream().anyMatch(s -> !s.matches("[a-z][a-z0-9.-]*")))
             throw new IllegalArgumentException("rules.disabled 包含无效规则 ID");
+        var unknownDisabled = new LinkedHashSet<>(disabledRules);
+        unknownDisabled.removeAll(RuleCatalog.KNOWN_IDS);
+        if (!unknownDisabled.isEmpty()) throw new IllegalArgumentException("rules.disabled 包含未知规则 ID: " + unknownDisabled);
+        var unknownWaivers = new LinkedHashSet<>(waivers.keySet());
+        unknownWaivers.removeAll(RuleCatalog.KNOWN_IDS);
+        if (!unknownWaivers.isEmpty()) throw new IllegalArgumentException("waiver 包含未知规则 ID: " + unknownWaivers);
     }
 
     public static AnalyzerConfig defaults() { return new AnalyzerConfig(DEFAULT_IGNORED, Set.of(), 10_000, 256 * 1024L, 20, ScoreWeights.DEFAULT, Map.of()); }

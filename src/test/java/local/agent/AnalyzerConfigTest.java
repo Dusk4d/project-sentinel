@@ -54,6 +54,15 @@ final class AnalyzerConfigTest {
         assertThrows(IOException.class, () -> new ProjectAnalyzer().analyze(root));
     }
 
+    @Test void rejectsUnknownDisabledAndWaiverRuleIds() throws Exception {
+        Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "rules.disabled=docs.reedme\n");
+        IOException disabled = assertThrows(IOException.class, () -> AnalyzerConfig.load(root));
+        assertTrue(disabled.getMessage().contains("未知规则 ID"));
+        Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "waiver.tests.misng=2999-01-01|alice|typo\n");
+        IOException waiver = assertThrows(IOException.class, () -> AnalyzerConfig.load(root));
+        assertTrue(waiver.getMessage().contains("未知规则 ID"));
+    }
+
     @Test void activeWaiverPreservesFindingButRemovesDeduction() throws Exception {
         Files.writeString(root.resolve(AnalyzerConfig.FILE_NAME), "waiver.build.manifest=2999-12-31|alice|legacy migration\n");
         var profile = new ProjectAnalyzer().analyze(root);
