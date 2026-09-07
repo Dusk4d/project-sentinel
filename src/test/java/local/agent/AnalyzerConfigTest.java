@@ -23,7 +23,10 @@ final class AnalyzerConfigTest {
         Files.writeString(root.resolve("generated/Noise.java"), "// TODO ignored\nclass Noise {}");
         var profile = new ProjectAnalyzer().analyze(root);
         assertEquals(1, profile.todoCount());
-        assertTrue(profile.findings().stream().anyMatch(f -> f.message().contains("待办标记较多")));
+        var todo = profile.findings().stream().filter(f -> f.ruleId().equals("maintenance.todos")).findFirst().orElseThrow();
+        assertTrue(todo.message().contains("待办标记较多"));
+        assertTrue(todo.evidence().contains("src/main/java/App.java:1"));
+        assertFalse(todo.evidence().contains("generated"));
     }
 
     @Test void rejectsUnsafeOrOutOfRangeConfiguration() throws Exception {

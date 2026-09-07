@@ -122,6 +122,7 @@ mvn test
 - 对现有文件解析真实路径，拒绝借助符号链接或目录联接逃逸工作区。
 - 首版工具全部只读，不会修改或删除文件。
 - 单次读取和搜索有结果数量与文件大小上限。
+- TODO/FIXME/HACK 证据最多保留 10 个相对路径与行号，不复制源码行内容。
 - 依赖锁定检查覆盖 Maven/Gradle Wrapper、Node 锁文件、Python 锁文件、Cargo.lock 和 go.sum。
 - CI 发现覆盖 GitHub Actions、GitLab CI、Azure Pipelines、CircleCI、Jenkins、Buildkite、Bitbucket Pipelines 和 Woodpecker；只检查路径与文件名，不解析或执行流水线。
 

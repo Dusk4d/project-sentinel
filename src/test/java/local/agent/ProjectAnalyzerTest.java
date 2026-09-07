@@ -36,7 +36,11 @@ final class ProjectAnalyzerTest {
         Files.writeString(root.resolve("README.md"), "TODO is a documented keyword");
         Files.createDirectories(root.resolve("src/main/java"));
         Files.writeString(root.resolve("src/main/java/App.java"), "class App { String text = \"TODO\"; // TODO implement\n}");
-        assertEquals(1, new ProjectAnalyzer().analyze(root).todoCount());
+        var profile = new ProjectAnalyzer().analyze(root);
+        assertEquals(1, profile.todoCount());
+        var todo = profile.findings().stream().filter(f -> f.ruleId().equals(RuleCatalog.MAINTENANCE_TODOS)).findFirst().orElseThrow();
+        assertTrue(todo.evidence().contains("src/main/java/App.java:1"));
+        assertFalse(todo.evidence().contains("TODO implement"));
     }
 
     @Test void reportsMissingAndPresentDependencyLock() throws Exception {

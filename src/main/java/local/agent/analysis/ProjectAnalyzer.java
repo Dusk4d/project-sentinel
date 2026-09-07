@@ -39,7 +39,8 @@ public final class ProjectAnalyzer {
                 && p.getFileName().toString().toLowerCase(Locale.ROOT).matches("license([._-].*)?|copying([._-].*)?"));
         int sourceCount = (int) files.stream().filter(this::isSource).count();
         int testCount = (int) files.stream().filter(this::isTest).count();
-        int todos = countTodos(files, config);
+        TodoScan todoScan = scanTodos(normalized, files, config);
+        int todos = todoScan.count();
         String ecosystem = detectEcosystem(normalized);
 
         List<Finding> findings = new ArrayList<>();
@@ -56,8 +57,9 @@ public final class ProjectAnalyzer {
                 "仅检查文件名，未读取内容：" + sensitive, "确认文件未被提交，并通过示例配置和环境变量替代真实凭据"));
         if (sourceCount > 0 && testCount == 0) add(config, findings, new Finding(RuleCatalog.TESTS_MISSING, Severity.HIGH, "测试", "存在源码但没有识别到测试文件", "源码文件 " + sourceCount + " 个，测试文件 0 个", "为核心行为增加自动化测试"));
         else if (sourceCount > 0 && testCount * 5 < sourceCount) add(config, findings, new Finding(RuleCatalog.TESTS_RATIO, Severity.MEDIUM, "测试", "测试文件相对源码偏少", "源码 " + sourceCount + " 个，测试 " + testCount + " 个", "优先覆盖高风险核心路径"));
-        if (todos > config.todoWarningThreshold()) add(config, findings, new Finding(RuleCatalog.MAINTENANCE_TODOS, Severity.MEDIUM, "维护", "待办标记较多，可能存在积压", "发现 TODO/FIXME/HACK 共 " + todos + " 处，阈值 " + config.todoWarningThreshold(), "分类并为高价值待办设定负责人和完成条件"));
-        else add(config, findings, new Finding(RuleCatalog.MAINTENANCE_TODOS, Severity.INFO, "维护", "待办标记数量可控", "发现 TODO/FIXME/HACK 共 " + todos + " 处", "持续在每日报告中观察趋势"));
+        String todoEvidence = "发现 TODO/FIXME/HACK 共 " + todos + " 处" + evidenceLocations(todoScan.locations());
+        if (todos > config.todoWarningThreshold()) add(config, findings, new Finding(RuleCatalog.MAINTENANCE_TODOS, Severity.MEDIUM, "维护", "待办标记较多，可能存在积压", todoEvidence + "，阈值 " + config.todoWarningThreshold(), "分类并为高价值待办设定负责人和完成条件"));
+        else add(config, findings, new Finding(RuleCatalog.MAINTENANCE_TODOS, Severity.INFO, "维护", "待办标记数量可控", todoEvidence, "持续在每日报告中观察趋势"));
         if (files.size() >= config.maxFiles()) add(config, findings, new Finding(RuleCatalog.SCAN_FILE_LIMIT, Severity.MEDIUM, "规模", "扫描达到 " + config.maxFiles() + " 文件上限", "分析结果可能不完整", "配置更精确的忽略目录或拆分项目"));
 
         return new ProjectProfile(normalized, normalized.getFileName().toString(), ecosystem, files.size(), sourceCount,
@@ -92,18 +94,29 @@ public final class ProjectAnalyzer {
         return value.contains("/test/") || value.contains("/tests/") || name.contains("test") || name.contains("spec");
     }
 
-    private int countTodos(List<Path> files, AnalyzerConfig config) {
+    private TodoScan scanTodos(Path root, List<Path> files, AnalyzerConfig config) {
         int count = 0;
+        var locations = new ArrayList<String>();
         for (Path file : files) {
             try {
                 if (!isSource(file) || Files.size(file) > config.maxTextBytes()) continue;
-                for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-                    if (ACTION_MARKER.matcher(line).find()) count++;
+                var lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+                for (int index = 0; index < lines.size(); index++) {
+                    if (ACTION_MARKER.matcher(lines.get(index)).find()) {
+                        count++;
+                        if (locations.size() < 10) locations.add(root.relativize(file).toString().replace('\\', '/') + ":" + (index + 1));
+                    }
                 }
             } catch (IOException ignored) { }
         }
-        return count;
+        return new TodoScan(count, List.copyOf(locations));
     }
+
+    private String evidenceLocations(List<String> locations) {
+        return locations.isEmpty() ? "" : "，位置示例 " + locations;
+    }
+
+    private record TodoScan(int count, List<String> locations) { }
 
     private String detectEcosystem(Path root) {
         if (Files.exists(root.resolve("pom.xml"))) return "Java / Maven";
