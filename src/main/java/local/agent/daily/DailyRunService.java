@@ -5,6 +5,8 @@ import local.agent.history.HealthSnapshot;
 import local.agent.history.SnapshotStore;
 import local.agent.history.TrendReporter;
 import local.agent.report.ReportStore;
+import local.agent.report.HtmlReportStore;
+import local.agent.report.JsonReportStore;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -18,9 +20,11 @@ public final class DailyRunService {
         Path reports = stateRoot.resolve("reports");
         Path history = stateRoot.resolve("history.tsv");
         Path report = new ReportStore().save(profile, reports);
+        Path latestHtml = new HtmlReportStore().save(profile, stateRoot.resolve("latest.html"));
+        Path latestJson = new JsonReportStore().save(profile, stateRoot.resolve("latest.json"));
         var snapshots = new SnapshotStore();
         snapshots.append(history, HealthSnapshot.from(profile));
         String trend = new TrendReporter().render(snapshots.read(history));
-        return new DailyRunResult(profile.healthScore(), minimumScore, report, history, trend);
+        return new DailyRunResult(profile.healthScore(), minimumScore, report, latestHtml, latestJson, history, trend);
     }
 }

@@ -29,10 +29,13 @@ final class DailyRunServiceTest {
         assertTrue(first.passed());
         assertTrue(Files.isRegularFile(first.report()));
         assertTrue(Files.isRegularFile(first.history()));
+        assertTrue(Files.readString(first.latestHtml()).startsWith("<!doctype html>"));
+        assertTrue(Files.readString(first.latestJson()).contains("\"schemaVersion\": 1"));
         assertTrue(first.trend().contains("快照数：1"));
 
         var second = service.run(project, state, 100);
         assertTrue(second.trend().contains("快照数：2"));
+        assertEquals(state.resolve("latest.html").toAbsolutePath(), second.latestHtml());
         assertThrows(IllegalArgumentException.class, () -> service.run(project, state, 101));
     }
 }

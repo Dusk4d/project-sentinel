@@ -183,6 +183,8 @@ public final class Main {
             var result = new DailyRunService().run(project, stateDirectory, minimumScore);
             System.out.print(result.trend());
             System.out.println("报告: " + result.report());
+            System.out.println("最新 HTML: " + result.latestHtml());
+            System.out.println("最新 JSON: " + result.latestJson());
             System.out.println("质量门禁: " + (result.passed() ? "通过" : "未通过")
                     + "（当前 " + result.score() + "，最低 " + result.minimumScore() + "）");
             if (!result.passed()) System.exit(3);
