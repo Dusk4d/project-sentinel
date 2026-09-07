@@ -24,6 +24,7 @@ import java.time.Duration;
 import local.agent.report.BuildEvidenceStore;
 import local.agent.state.RunAlreadyActiveException;
 import local.agent.state.StateRunLock;
+import local.agent.state.RunStatusInspector;
 
 public final class Main {
     public static void main(String[] args) {
@@ -96,6 +97,10 @@ public final class Main {
             int seconds = args.length >= 5 ? parsePositiveSeconds(args[4]) : 120;
             int maximumDrop = args.length >= 6 ? parseScoreDrop(args[5]) : 100;
             runDailyVerify(Path.of(args[1]), Path.of(args[2]), minimum, seconds, maximumDrop);
+            return;
+        }
+        if (args.length >= 2 && args[0].equals("--state-status")) {
+            runStateStatus(Path.of(args[1]));
             return;
         }
         Path workspace = args.length == 0 ? Path.of(".") : Path.of(args[0]);
@@ -175,7 +180,7 @@ public final class Main {
     }
 
     private static void runPortfolioDaily(Path workspace, Path stateDirectory, int minimumScore) {
-        try (var ignored = StateRunLock.acquire(stateDirectory)) {
+        try (var ignored = StateRunLock.acquire(stateDirectory, "portfolio-daily")) {
             var result = new PortfolioRunService().run(workspace, stateDirectory, minimumScore);
             System.out.println("项目数: " + result.projectCount());
             System.out.println("最低健康分: " + result.lowestScore());
@@ -256,7 +261,7 @@ public final class Main {
     }
 
     private static void runDailyVerify(Path project, Path stateDirectory, int minimumScore, int timeoutSeconds, int maximumDrop) {
-        try (var ignored = StateRunLock.acquire(stateDirectory)) {
+        try (var ignored = StateRunLock.acquire(stateDirectory, "daily-verify")) {
             var daily = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
             var build = new BuildVerifier().verify(project, Duration.ofSeconds(timeoutSeconds));
             var evidence = new BuildEvidenceStore().save(stateDirectory, build);
@@ -279,7 +284,7 @@ public final class Main {
     }
 
     private static void runDaily(Path project, Path stateDirectory, int minimumScore, int maximumDrop) {
-        try (var ignored = StateRunLock.acquire(stateDirectory)) {
+        try (var ignored = StateRunLock.acquire(stateDirectory, "daily")) {
             var result = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
             System.out.print(result.trend());
             System.out.println("报告: " + result.report());
@@ -303,6 +308,20 @@ public final class Main {
     private static void printDailyGate(local.agent.daily.DailyRunResult result) {
         System.out.println("静态健康分: " + result.score() + "，分数门禁: " + (result.scorePassed() ? "通过" : "未通过"));
         printRegressionGate(result);
+    }
+
+    private static void runStateStatus(Path stateDirectory) {
+        try {
+            var status = new RunStatusInspector().inspect(stateDirectory);
+            System.out.println("状态: " + (status.active() ? "RUNNING" : "IDLE"));
+            if (status.metadata() != null) {
+                System.out.println("进程: " + (status.metadata().processId() < 0 ? "unknown" : status.metadata().processId()));
+                System.out.println("开始: " + (status.metadata().startedAt() == null ? "unknown" : status.metadata().startedAt()));
+                System.out.println("操作: " + status.metadata().operation());
+            }
+        } catch (Exception e) {
+            System.err.println("状态查询失败: " + e.getMessage()); System.exit(1);
+        }
     }
 
     private static void printRegressionGate(local.agent.daily.DailyRunResult result) {

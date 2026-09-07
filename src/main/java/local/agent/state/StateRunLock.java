@@ -7,9 +7,12 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import local.agent.report.AtomicTextStore;
 
 public final class StateRunLock implements AutoCloseable {
-    private static final String LOCK_NAME = ".workspace-agent.lock";
+    static final String LOCK_NAME = ".workspace-agent.lock";
+    static final String INFO_NAME = ".workspace-agent.lock.info";
     private final FileChannel channel;
     private final FileLock lock;
 
@@ -19,6 +22,10 @@ public final class StateRunLock implements AutoCloseable {
     }
 
     public static StateRunLock acquire(Path stateDirectory) throws IOException {
+        return acquire(stateDirectory, "stateful-run");
+    }
+
+    public static StateRunLock acquire(Path stateDirectory, String operation) throws IOException {
         Path state = stateDirectory.toAbsolutePath().normalize();
         Files.createDirectories(state);
         Path lockFile = state.resolve(LOCK_NAME);
@@ -34,6 +41,10 @@ public final class StateRunLock implements AutoCloseable {
                 channel.close();
                 throw new RunAlreadyActiveException(lockFile);
             }
+            String safeOperation = operation.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
+            String metadata = "pid=" + ProcessHandle.current().pid() + "\nstartedAt=" + Instant.now()
+                    + "\noperation=" + safeOperation + "\n";
+            new AtomicTextStore().write(state.resolve(INFO_NAME), metadata);
             return new StateRunLock(channel, lock);
         } catch (IOException | RuntimeException failure) {
             if (channel.isOpen()) channel.close();

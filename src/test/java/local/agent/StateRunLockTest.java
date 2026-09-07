@@ -2,6 +2,7 @@ package local.agent;
 
 import local.agent.state.RunAlreadyActiveException;
 import local.agent.state.StateRunLock;
+import local.agent.state.RunStatusInspector;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -27,6 +28,22 @@ final class StateRunLockTest {
         });
     }
 
+    @Test void reportsOwnerMetadataWhileActiveAndLastRunWhenIdle() throws Exception {
+        Path state = temp.resolve("observable");
+        var inspector = new RunStatusInspector();
+        assertFalse(inspector.inspect(state).active());
+        try (var ignored = StateRunLock.acquire(state, "daily-verify")) {
+            var running = inspector.inspect(state);
+            assertTrue(running.active());
+            assertEquals(ProcessHandle.current().pid(), running.metadata().processId());
+            assertEquals("daily-verify", running.metadata().operation());
+            assertNotNull(running.metadata().startedAt());
+        }
+        var idle = inspector.inspect(state);
+        assertFalse(idle.active());
+        assertEquals("daily-verify", idle.metadata().operation());
+    }
+
     @Test void differentStateDirectoriesDoNotBlockEachOther() throws Exception {
         try (var first = StateRunLock.acquire(temp.resolve("one"));
              var second = StateRunLock.acquire(temp.resolve("two"))) {
@@ -46,6 +63,10 @@ final class StateRunLockTest {
             var ready = child.inputReader().readLine();
             assertEquals("LOCKED", ready);
             assertThrows(RunAlreadyActiveException.class, () -> StateRunLock.acquire(state));
+            var status = new RunStatusInspector().inspect(state);
+            assertTrue(status.active());
+            assertNotNull(status.metadata());
+            assertTrue(status.metadata().processId() > 0);
         } finally {
             child.destroy();
             if (!child.waitFor(Duration.ofSeconds(2).toMillis(), TimeUnit.MILLISECONDS)) child.destroyForcibly();

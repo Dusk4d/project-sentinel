@@ -66,6 +66,9 @@ java -jar target/workspace-agent-0.2.0.jar --verify-build D:\path\to\project 120
 
 # 显式执行“静态日报 + 真实构建”，保存最新与历史构建证据
 java -jar target/workspace-agent-0.2.0.jar --daily-verify D:\path\to\project D:\path\to\agent-state 80 120 5
+
+# 查询状态目录当前是否被任务占用，并显示进程、开始时间和操作类型
+java -jar target/workspace-agent-0.2.0.jar --state-status D:\path\to\agent-state
 ```
 
 使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项或缺少参数会输出帮助并返回退出码 `2`。
@@ -75,6 +78,7 @@ java -jar target/workspace-agent-0.2.0.jar --daily-verify D:\path\to\project D:\
 每次 `--daily` 会在状态目录中原子更新 `latest.html` 与 `latest.json`，追加 `history.tsv`，并在 `reports` 子目录保存带时间戳的 Markdown。历史报告不会被自动删除。
 
 `--daily`、`--daily-verify` 和 `--portfolio-daily` 会对各自的状态目录持有跨进程锁。重叠启动的后来任务会立即返回 `6`，不会等待或覆盖前一次历史。锁文件本身会保留，是否正在运行由操作系统文件锁判定，不要仅凭文件存在与否判断。
+使用 `--state-status` 可安全判断 `RUNNING` 或 `IDLE`；`IDLE` 时显示的元数据代表上一次持锁任务，不表示该 PID 仍在运行。
 
 `--verify-build` 会执行项目代码，只应对可信项目显式调用；默认扫描和每日健康检查仍为静态只读分析。构建失败返回 `4`，超时返回 `5`，输出最多保留 64 KiB。
 
