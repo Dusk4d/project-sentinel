@@ -22,6 +22,8 @@ import local.agent.portfolio.PortfolioRunService;
 import local.agent.verification.BuildVerifier;
 import java.time.Duration;
 import local.agent.report.BuildEvidenceStore;
+import local.agent.state.RunAlreadyActiveException;
+import local.agent.state.StateRunLock;
 
 public final class Main {
     public static void main(String[] args) {
@@ -173,7 +175,7 @@ public final class Main {
     }
 
     private static void runPortfolioDaily(Path workspace, Path stateDirectory, int minimumScore) {
-        try {
+        try (var ignored = StateRunLock.acquire(stateDirectory)) {
             var result = new PortfolioRunService().run(workspace, stateDirectory, minimumScore);
             System.out.println("项目数: " + result.projectCount());
             System.out.println("最低健康分: " + result.lowestScore());
@@ -183,6 +185,8 @@ public final class Main {
             if (!result.passed()) System.exit(3);
         } catch (IllegalArgumentException e) {
             System.err.println("参数错误: " + e.getMessage()); System.exit(2);
+        } catch (RunAlreadyActiveException e) {
+            System.err.println(e.getMessage()); System.exit(6);
         } catch (Exception e) {
             System.err.println("组合巡检失败: " + e.getMessage()); System.exit(1);
         }
@@ -252,7 +256,7 @@ public final class Main {
     }
 
     private static void runDailyVerify(Path project, Path stateDirectory, int minimumScore, int timeoutSeconds, int maximumDrop) {
-        try {
+        try (var ignored = StateRunLock.acquire(stateDirectory)) {
             var daily = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
             var build = new BuildVerifier().verify(project, Duration.ofSeconds(timeoutSeconds));
             var evidence = new BuildEvidenceStore().save(stateDirectory, build);
@@ -267,13 +271,15 @@ public final class Main {
             if (!daily.passed()) System.exit(3);
         } catch (IllegalArgumentException e) {
             System.err.println("参数错误: " + e.getMessage()); System.exit(2);
+        } catch (RunAlreadyActiveException e) {
+            System.err.println(e.getMessage()); System.exit(6);
         } catch (Exception e) {
             System.err.println("每日构建验证失败: " + e.getMessage()); System.exit(1);
         }
     }
 
     private static void runDaily(Path project, Path stateDirectory, int minimumScore, int maximumDrop) {
-        try {
+        try (var ignored = StateRunLock.acquire(stateDirectory)) {
             var result = new DailyRunService().run(project, stateDirectory, minimumScore, maximumDrop);
             System.out.print(result.trend());
             System.out.println("报告: " + result.report());
@@ -286,6 +292,8 @@ public final class Main {
         } catch (IllegalArgumentException e) {
             System.err.println("参数错误: " + e.getMessage());
             System.exit(2);
+        } catch (RunAlreadyActiveException e) {
+            System.err.println(e.getMessage()); System.exit(6);
         } catch (Exception e) {
             System.err.println("每日运行失败: " + e.getMessage());
             System.exit(1);
