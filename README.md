@@ -51,6 +51,8 @@ java -cp target/classes local.agent.Main --portfolio D:\path\to\workspace
 # 生成稳定的多项目 Markdown、HTML、JSON 看板，并以最低项目分执行门禁
 java -jar target/workspace-agent-0.2.0.jar --portfolio-daily D:\path\to\workspace D:\path\to\portfolio-state 70
 
+# 多项目模式默认向下发现 4 层目录中的构建清单或 Git 仓库
+
 # 追加结构化健康快照，并展示跨日趋势
 java -jar target/workspace-agent-0.2.0.jar --snapshot D:\path\to\project D:\path\to\history.tsv
 java -jar target/workspace-agent-0.2.0.jar --trend D:\path\to\history.tsv
