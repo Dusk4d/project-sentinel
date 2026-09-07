@@ -43,19 +43,19 @@ public final class ProjectAnalyzer {
         String ecosystem = detectEcosystem(normalized);
 
         List<Finding> findings = new ArrayList<>();
-        if (!readme) add(config, findings, new Finding("docs.readme", Severity.MEDIUM, "文档", "缺少 README，项目目标和运行方式不可发现", "项目根目录未发现 README*", "补充目标、安装、运行和测试说明"));
-        if (!build) add(config, findings, new Finding("build.manifest", Severity.HIGH, "可复现性", "缺少可识别的构建清单", "未发现常见构建文件", "添加与技术栈匹配的构建配置"));
-        if (!gitIgnore) add(config, findings, new Finding("vcs.gitignore", Severity.LOW, "版本控制", "缺少 .gitignore", "项目根目录未发现 .gitignore", "排除构建产物、IDE 文件和本地机密"));
-        if (!license) add(config, findings, new Finding("legal.license", Severity.LOW, "合规", "缺少明确的软件许可证", "项目根目录未发现 LICENSE 或 COPYING", "若计划分享或开源，选择并添加合适许可证"));
+        if (!readme) add(config, findings, new Finding(RuleCatalog.DOCS_README, Severity.MEDIUM, "文档", "缺少 README，项目目标和运行方式不可发现", "项目根目录未发现 README*", "补充目标、安装、运行和测试说明"));
+        if (!build) add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST, Severity.HIGH, "可复现性", "缺少可识别的构建清单", "未发现常见构建文件", "添加与技术栈匹配的构建配置"));
+        if (!gitIgnore) add(config, findings, new Finding(RuleCatalog.VCS_GITIGNORE, Severity.LOW, "版本控制", "缺少 .gitignore", "项目根目录未发现 .gitignore", "排除构建产物、IDE 文件和本地机密"));
+        if (!license) add(config, findings, new Finding(RuleCatalog.LEGAL_LICENSE, Severity.LOW, "合规", "缺少明确的软件许可证", "项目根目录未发现 LICENSE 或 COPYING", "若计划分享或开源，选择并添加合适许可证"));
         addReproducibilityFinding(normalized, ecosystem, findings, config);
         var sensitive = files.stream().filter(this::hasSensitiveName).map(normalized::relativize).limit(5).toList();
-        if (!sensitive.isEmpty()) add(config, findings, new Finding("security.sensitive-file", Severity.HIGH, "安全", "发现可能包含密钥或本地配置的敏感文件名",
+        if (!sensitive.isEmpty()) add(config, findings, new Finding(RuleCatalog.SECURITY_SENSITIVE_FILE, Severity.HIGH, "安全", "发现可能包含密钥或本地配置的敏感文件名",
                 "仅检查文件名，未读取内容：" + sensitive, "确认文件未被提交，并通过示例配置和环境变量替代真实凭据"));
-        if (sourceCount > 0 && testCount == 0) add(config, findings, new Finding("tests.missing", Severity.HIGH, "测试", "存在源码但没有识别到测试文件", "源码文件 " + sourceCount + " 个，测试文件 0 个", "为核心行为增加自动化测试"));
-        else if (sourceCount > 0 && testCount * 5 < sourceCount) add(config, findings, new Finding("tests.ratio", Severity.MEDIUM, "测试", "测试文件相对源码偏少", "源码 " + sourceCount + " 个，测试 " + testCount + " 个", "优先覆盖高风险核心路径"));
-        if (todos > config.todoWarningThreshold()) add(config, findings, new Finding("maintenance.todos", Severity.MEDIUM, "维护", "待办标记较多，可能存在积压", "发现 TODO/FIXME/HACK 共 " + todos + " 处，阈值 " + config.todoWarningThreshold(), "分类并为高价值待办设定负责人和完成条件"));
-        else add(config, findings, new Finding("maintenance.todos", Severity.INFO, "维护", "待办标记数量可控", "发现 TODO/FIXME/HACK 共 " + todos + " 处", "持续在每日报告中观察趋势"));
-        if (files.size() >= config.maxFiles()) add(config, findings, new Finding("scan.file-limit", Severity.MEDIUM, "规模", "扫描达到 " + config.maxFiles() + " 文件上限", "分析结果可能不完整", "配置更精确的忽略目录或拆分项目"));
+        if (sourceCount > 0 && testCount == 0) add(config, findings, new Finding(RuleCatalog.TESTS_MISSING, Severity.HIGH, "测试", "存在源码但没有识别到测试文件", "源码文件 " + sourceCount + " 个，测试文件 0 个", "为核心行为增加自动化测试"));
+        else if (sourceCount > 0 && testCount * 5 < sourceCount) add(config, findings, new Finding(RuleCatalog.TESTS_RATIO, Severity.MEDIUM, "测试", "测试文件相对源码偏少", "源码 " + sourceCount + " 个，测试 " + testCount + " 个", "优先覆盖高风险核心路径"));
+        if (todos > config.todoWarningThreshold()) add(config, findings, new Finding(RuleCatalog.MAINTENANCE_TODOS, Severity.MEDIUM, "维护", "待办标记较多，可能存在积压", "发现 TODO/FIXME/HACK 共 " + todos + " 处，阈值 " + config.todoWarningThreshold(), "分类并为高价值待办设定负责人和完成条件"));
+        else add(config, findings, new Finding(RuleCatalog.MAINTENANCE_TODOS, Severity.INFO, "维护", "待办标记数量可控", "发现 TODO/FIXME/HACK 共 " + todos + " 处", "持续在每日报告中观察趋势"));
+        if (files.size() >= config.maxFiles()) add(config, findings, new Finding(RuleCatalog.SCAN_FILE_LIMIT, Severity.MEDIUM, "规模", "扫描达到 " + config.maxFiles() + " 文件上限", "分析结果可能不完整", "配置更精确的忽略目录或拆分项目"));
 
         return new ProjectProfile(normalized, normalized.getFileName().toString(), ecosystem, files.size(), sourceCount,
                 testCount, todos, readme, build, gitIgnore, config.scoreWeights(), List.copyOf(findings));
@@ -122,7 +122,7 @@ public final class ProjectAnalyzer {
             case "Go" -> Files.isRegularFile(root.resolve("go.sum"));
             default -> true;
         };
-        if (!reproducible) add(config, findings, new Finding("build.lock", Severity.LOW, "可复现性", "依赖或构建工具版本未锁定",
+        if (!reproducible) add(config, findings, new Finding(RuleCatalog.BUILD_LOCK, Severity.LOW, "可复现性", "依赖或构建工具版本未锁定",
                 "技术栈为 " + ecosystem + "，未发现对应 wrapper 或锁文件", "生成并提交该技术栈的 wrapper 或依赖锁文件"));
     }
 

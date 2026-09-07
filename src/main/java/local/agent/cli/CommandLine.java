@@ -42,6 +42,7 @@ public final class CommandLine {
                   java -jar workspace-agent.jar --state-status <状态目录>
                   java -jar workspace-agent.jar --init-config <项目>
                   java -jar workspace-agent.jar --validate-config <项目>
+                  java -jar workspace-agent.jar --list-rules
                   java -jar workspace-agent.jar --help
                   java -jar workspace-agent.jar --version
                 """.formatted(VERSION);
@@ -64,6 +65,7 @@ public final class CommandLine {
         result.put("--state-status", exact(2));
         result.put("--init-config", exact(2));
         result.put("--validate-config", exact(2));
+        result.put("--list-rules", exact(1));
         result.put("--help", exact(1));
         result.put("--version", exact(1));
         return Map.copyOf(result);

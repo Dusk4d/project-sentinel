@@ -28,6 +28,7 @@ import local.agent.state.RunStatusInspector;
 import local.agent.config.ConfigInitializer;
 import local.agent.config.AnalyzerConfig;
 import local.agent.report.ConfigSummaryWriter;
+import local.agent.report.RuleCatalogWriter;
 
 public final class Main {
     public static void main(String[] args) {
@@ -112,6 +113,10 @@ public final class Main {
         }
         if (args.length >= 2 && args[0].equals("--validate-config")) {
             runValidateConfig(Path.of(args[1]));
+            return;
+        }
+        if (args.length == 1 && args[0].equals("--list-rules")) {
+            System.out.print(new RuleCatalogWriter().render());
             return;
         }
         Path workspace = args.length == 0 ? Path.of(".") : Path.of(args[0]);

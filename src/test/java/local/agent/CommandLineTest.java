@@ -17,6 +17,7 @@ final class CommandLineTest {
         assertTrue(CommandLine.validate(new String[]{"--state-status", "state"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--init-config", "project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--validate-config", "project"}).isEmpty());
+        assertTrue(CommandLine.validate(new String[]{"--list-rules"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--help"}).isEmpty());
         assertTrue(CommandLine.usage().contains("--check-json <项目>"));
     }

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import local.agent.analysis.RuleCatalog;
 
 final class ProjectAnalyzerTest {
     @TempDir Path root;
@@ -20,6 +21,7 @@ final class ProjectAnalyzerTest {
         assertTrue(profile.hasReadme());
         assertTrue(profile.hasBuildFile());
         assertTrue(profile.healthScore() < 100);
+        assertTrue(RuleCatalog.KNOWN_IDS.containsAll(profile.findings().stream().map(f -> f.ruleId()).toList()));
     }
 
     @Test void flagsSensitiveFileNamesWithoutReadingTheirContents() throws Exception {

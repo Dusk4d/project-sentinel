@@ -75,6 +75,9 @@ java -jar target/workspace-agent-0.2.0.jar --init-config D:\path\to\project
 
 # 不扫描源码，只校验配置并显示最终生效值
 java -jar target/workspace-agent-0.2.0.jar --validate-config D:\path\to\project
+
+# 列出可用于禁用和豁免的全部稳定规则 ID
+java -jar target/workspace-agent-0.2.0.jar --list-rules
 ```
 
 使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项、缺少参数或多余参数会输出帮助并返回退出码 `2`；所有参数都必须被明确消费，避免定时脚本的拼写错误被静默忽略。
@@ -133,6 +136,7 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 
 可先运行 `--init-config`生成可直接解析的完整示例。该命令使用“仅当目标不存在时创建”语义；重复运行只会报告已存在，不会更改现有内容。
 修改后可用 `--validate-config` 在不扫描源码的情况下预检。未知的禁用规则或豁免规则 ID 会被视为错误，避免拼写错误静默失效。
+使用 `--list-rules` 查看当前版本支持的全部 ID、类别和触发条件，不需要先制造对应风险来从报告中发现 ID。
 
 忽略项只能是目录名，不能使用路径或 `..`。规则抑制使用报告中的稳定 `ruleId`，例如 `legal.license`；不要依赖中文文案。长期使用时优先采用 `waiver.<ruleId>=到期日|负责人|原因`：有效豁免保留发现但不扣分，到期后自动恢复扣分。评分权重限制为 0～100，且必须满足高风险 ≥ 中风险 ≥ 低风险。错误配置会令任务失败并返回退出码 `1`。
 
