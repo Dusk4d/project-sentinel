@@ -20,7 +20,7 @@ README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_C
 
 ## 运行
 
-Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，可在页面选择项目、扫描健康度，并使用“项目问答（本地 RAG）”查询启动方式或代码位置；回答会展示来源路径和行号。关闭窗口或按 `Ctrl+C` 停止。
+Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，可在页面选择项目、扫描健康度，并使用“项目问答（RAG）”查询启动方式或代码位置；回答会展示来源路径和行号。关闭窗口或按 `Ctrl+C` 停止。
 
 也可以在 PowerShell 中指定工作区和端口：
 
@@ -89,6 +89,8 @@ $env:SENTINEL_MODEL_NAME = "本机已安装的模型名"
 # 仅需要鉴权的服务才设置 SENTINEL_MODEL_API_KEY；不要写入仓库文件
 java -jar target/workspace-agent-0.2.0.jar --ask-ai D:\path\to\workspace "项目怎么启动？"
 
+# 在同一窗口执行 start-web.cmd 后，页面也会启用“使用模型增强”复选框
+
 # 扫描一个目录下可识别的多个项目，按健康分排序
 java -cp target/classes local.agent.Main --portfolio D:\path\to\workspace
 
@@ -135,6 +137,8 @@ Web 项目目录最多保留 200 项，只有确认发现第 201 项时才标记
 同一 Web 进程一次只执行一个扫描请求，避免多个标签页同时遍历磁盘。忙碌时分析接口返回 HTTP `429` 和 `Retry-After: 1`；`/api/health` 仍可用，并通过 `scanBusy` 暴露当前状态。
 
 Web RAG 接口为 `POST /api/rag?project=<项目ID>`，只接受 UTF-8 `text/plain`，问题请求体最多 8 KiB，并与健康扫描共享单实例准入控制和启动时生成的项目白名单。
+
+模型已配置时，`POST /api/rag-ai?project=<项目ID>` 使用相同的请求与安全边界。`/api/projects` 和 `/api/health` 只通过 `modelEnabled` 布尔值公开能力状态，不公开端点、模型名或密钥。模型失败时接口返回带降级原因的本地回答。
 
 Windows CLI 输出遵循 JVM 检测到的终端原生编码。若你在启动 Java 后又手工切换了代码页，请重新打开终端，或确保 `chcp` 与 Java 的 `stdout.encoding` 一致。
 
@@ -211,7 +215,7 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 - 增加带审批策略的文件创建与补丁工具。
 - 支持扫描结果缓存和增量分析。
 - 增加任务历史、记忆和可恢复执行状态。
-- 将可选模型增强问答接入 Web 看板，并增加流式输出。
+- 为模型增强问答增加可选流式输出。
 - 增加更完善的自动化测试和打包发布流程。
 
 产品背景见 [docs/VISION.md](docs/VISION.md)，设计边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，威胁模型见 [docs/SECURITY.md](docs/SECURITY.md)。

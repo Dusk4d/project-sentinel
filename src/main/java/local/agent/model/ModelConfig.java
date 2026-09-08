@@ -3,10 +3,22 @@ package local.agent.model;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 public record ModelConfig(URI endpoint, String model, String apiKey, Duration timeout) {
     public static ModelConfig fromEnvironment() {
         return from(System.getenv());
+    }
+
+    public static Optional<ModelConfig> optionalFromEnvironment() {
+        return optionalFrom(System.getenv());
+    }
+
+    static Optional<ModelConfig> optionalFrom(Map<String, String> environment) {
+        boolean hasBase = !environment.getOrDefault("SENTINEL_MODEL_BASE_URL", "").isBlank();
+        boolean hasModel = !environment.getOrDefault("SENTINEL_MODEL_NAME", "").isBlank();
+        if (!hasBase && !hasModel) return Optional.empty();
+        return Optional.of(from(environment));
     }
 
     static ModelConfig from(Map<String, String> environment) {

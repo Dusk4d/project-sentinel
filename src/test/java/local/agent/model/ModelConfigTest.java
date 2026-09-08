@@ -21,4 +21,10 @@ final class ModelConfigTest {
         assertThrows(IllegalArgumentException.class, () -> ModelConfig.from(Map.of(
                 "SENTINEL_MODEL_BASE_URL", "https://example.com/v1")));
     }
+
+    @Test void optionalConfigurationIsAbsentOnlyWhenBothSettingsAreAbsent() {
+        assertTrue(ModelConfig.optionalFrom(Map.of()).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> ModelConfig.optionalFrom(Map.of(
+                "SENTINEL_MODEL_BASE_URL", "http://localhost:11434/v1")));
+    }
 }
