@@ -1,11 +1,13 @@
 package local.agent.cli;
 
+import local.agent.BuildInfo;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
 public final class CommandLine {
-    public static final String VERSION = "0.2.0";
+    public static final String VERSION = BuildInfo.version();
     private static final Map<String, CommandSpec> COMMANDS = commands();
 
     private CommandLine() { }

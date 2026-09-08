@@ -6,12 +6,15 @@
 
 ```powershell
 .\mvnw.cmd clean verify
-java -jar target\workspace-agent-0.2.0.jar --version
+$jar = (Get-ChildItem target\workspace-agent-*.jar | Select-Object -First 1).FullName
+java -jar $jar --version
 ```
 
 Linux/macOS 使用 `./mvnw clean verify`。
 
 `package` 阶段还会生成 `target/project-sentinel-<版本>-distribution.zip`。提交发行相关变更时，应解压该文件并直接运行其中的 `project-sentinel.cmd --version` 或 `project-sentinel.sh --version`。推送 `v<版本>` 标签前，标签必须与 JAR 报告的版本完全一致；标签工作流通过测试后才创建 GitHub Release 和 SHA-256 文件。
+
+版本只在 `pom.xml` 中维护。构建会把它写入过滤后的 `project-sentinel.properties`，运行时和发布校验均读取该资源。不要在 Java、脚本或文档逻辑中另建版本常量。构建输出使用固定时间戳；修改打包配置时，应连续执行两次 `clean package` 并比较 JAR 与 ZIP 的 SHA-256。
 
 ## 变更要求
 

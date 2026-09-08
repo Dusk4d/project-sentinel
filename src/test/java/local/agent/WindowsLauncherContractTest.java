@@ -18,6 +18,8 @@ final class WindowsLauncherContractTest {
         assertTrue(build >= 0, "启动器必须在每次运行时执行增量构建");
         assertTrue(failureGuard > build, "启动器必须检查 Maven 退出码");
         assertTrue(launch > failureGuard, "只有成功构建后才能启动 JAR");
+        assertTrue(script.contains("workspace-agent-*.jar"), "启动器必须动态发现 Maven 版本化构件");
+        assertTrue(script.contains("if not defined SENTINEL_JAR"), "启动器必须拒绝缺失构件");
         assertFalse(script.contains("if not exist \"target\\workspace-agent-0.2.0.jar\""),
                 "仅检查 JAR 是否存在会运行陈旧构件");
     }

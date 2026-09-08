@@ -1,7 +1,9 @@
 package local.agent;
 
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 import local.agent.analysis.PortfolioAnalyzer;
 import local.agent.analysis.ProjectAnalyzer;
@@ -40,6 +42,7 @@ import local.agent.model.AgentMemoryStore;
 
 public final class Main {
     public static void main(String[] args) {
+        configureUtf8Console();
         var argumentError = CommandLine.validate(args);
         if (argumentError.isPresent()) {
             System.err.println(argumentError.get());
@@ -180,6 +183,11 @@ public final class Main {
                 System.out.println(agent.run(request));
             }
         }
+    }
+
+    private static void configureUtf8Console() {
+        System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(System.err, true, StandardCharsets.UTF_8));
     }
 
     private static void runCheck(Path project) {

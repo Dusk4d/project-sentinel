@@ -73,8 +73,10 @@ ZIP 上传使用独立的 `ZipProjectUpload` 边界：请求体、条目数、�
 
 `AgentMemoryStore` 为可选有状态命令保存成功完成的任务和最终回答。记忆文档带 schema 版本和规范化工作区身份，原子更新且受条数/字节双重边界约束；读取时验证时间单调性。`StateRunLock` 防止同一状态目录并发覆盖。模型上下文只接收最近五条截断记录，当前任务仍位于最后。
 
-`CommandLine` 是公开 CLI 契约的单一注册点，负责命令最小参数校验、版本号与帮助文本，避免未知选项被误判为交互式工作区路径。
+`CommandLine` 是公开 CLI 契约的单一注册点，负责命令最小参数校验与帮助文本，避免未知选项被误判为交互式工作区路径。运行时版本由 `BuildInfo` 读取 Maven 资源过滤生成的 `project-sentinel.properties`，因此 POM、CLI、发行包和标签校验共享同一版本来源；资源缺失或未过滤时直接拒绝启动。
 
-Maven `package` 阶段使用固定版本的 Assembly Plugin 生成独立 ZIP，内含可执行 JAR、Windows/Unix 启动器和用户文档。CI 解压后再次运行分发包而非只检查构建目录 JAR，并生成 SHA-256；`v*` 标签还必须与应用版本完全一致才允许创建 Release。
+`Main` 在处理参数前将标准输出与错误输出显式包装为 UTF-8，使命令行报告在 PowerShell、CI 和进程捕获场景中使用同一字节编码；Web 响应也独立声明 UTF-8。
+
+Maven `package` 阶段使用固定版本的 Assembly Plugin 生成独立 ZIP，内含可执行 JAR、Windows/Unix 启动器和用户文档。项目固定构建输出时间戳，使相同源码和工具链连续构建的 JAR 与 ZIP 字节一致。CI 解压后再次运行分发包而非只检查构建目录 JAR，并生成 SHA-256；`v*` 标签还必须与应用版本完全一致才允许创建 Release。
 
 路径安全采用两层校验：`WorkspaceGuard` 同时检查词法规范化路径和现有文件的真实路径；`ProjectAnalyzer` 只接收真实路径仍位于项目根目录内的常规文件。这样即使工作区中存在指向外部的符号链接或目录联接，也不会读取目标内容。

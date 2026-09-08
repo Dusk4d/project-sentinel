@@ -16,4 +16,10 @@ if errorlevel 1 (
 
 echo Open http://127.0.0.1:%SENTINEL_PORT%/ in your browser.
 echo Scanning workspace: %SENTINEL_WORKSPACE%
-java -jar "target\workspace-agent-0.2.0.jar" --serve "%SENTINEL_WORKSPACE%" "%SENTINEL_PORT%"
+set "SENTINEL_JAR="
+for %%J in ("%~dp0target\workspace-agent-*.jar") do if exist "%%~fJ" if not defined SENTINEL_JAR set "SENTINEL_JAR=%%~fJ"
+if not defined SENTINEL_JAR (
+  echo Build succeeded but no workspace-agent JAR was found.
+  exit /b 1
+)
+java -jar "%SENTINEL_JAR%" --serve "%SENTINEL_WORKSPACE%" "%SENTINEL_PORT%"
