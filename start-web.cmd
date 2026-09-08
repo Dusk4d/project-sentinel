@@ -7,13 +7,11 @@ if not defined SENTINEL_WORKSPACE for %%I in ("%~dp0..") do set "SENTINEL_WORKSP
 set "SENTINEL_PORT=%~2"
 if not defined SENTINEL_PORT set "SENTINEL_PORT=8787"
 
-if not exist "target\workspace-agent-0.2.0.jar" (
-  echo Building Project Sentinel...
-  call mvnw.cmd --batch-mode --no-transfer-progress package
-  if errorlevel 1 (
-    echo Build failed.
-    exit /b 1
-  )
+echo Preparing the latest Project Sentinel build...
+call mvnw.cmd --batch-mode --no-transfer-progress package
+if errorlevel 1 (
+  echo Build failed. The web server was not started.
+  exit /b 1
 )
 
 echo Open http://127.0.0.1:%SENTINEL_PORT%/ in your browser.

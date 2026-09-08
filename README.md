@@ -12,7 +12,7 @@ README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_C
 
 ## 运行
 
-Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在缺少 JAR 时自动调用 Maven Wrapper 构建。启动后访问 `http://127.0.0.1:8787/`，关闭窗口或按 `Ctrl+C` 停止。
+Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，关闭窗口或按 `Ctrl+C` 停止。
 
 也可以在 PowerShell 中指定工作区和端口：
 

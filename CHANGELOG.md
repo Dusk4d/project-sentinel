@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- Windows 启动器每次启动都执行增量打包，避免已有 JAR 掩盖更新后的源码。
 - 恢复 Unix Maven Wrapper 可执行位并升级 GitHub Actions 运行时，修复 Linux CI 的退出码 126。
 - 构建命令检测测试显式覆盖 Windows 和 Unix，消除依赖测试宿主系统的错误断言。
 
