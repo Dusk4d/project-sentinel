@@ -35,6 +35,8 @@ CLI 在整个日检编排期间持有 `StateRunLock`，锁粒度是规范化后�
 
 `LocalWebServer` 基于 JDK 自带 HTTP Server，仅绑定回环地址。启动时复用有界 `ProjectDiscovery` 建立项目白名单，浏览器只能提交白名单签发的不透明 ID，不能提交任意文件系统路径。动态页面只调用与 CLI 相同的 `ProjectAnalyzer` 和 `JsonReportWriter`，不提供构建执行端点；响应固定使用 UTF-8、禁用缓存，并设置内容类型保护和限制性 CSP。
 
+每个请求先验证 `Host`；浏览器提供 `Origin` 时还必须是与服务实际端口相同的 HTTP 回环来源。命令行客户端可以省略 `Origin`，但恶意网页不能借助跨站简单请求触发磁盘扫描或模型调用。
+
 ZIP 上传使用独立的 `ZipProjectUpload` 边界：请求体、条目数、单文件和总解压量均有硬上限；所有条目规范化后必须位于临时根目录内。临时目录创建在用户指定的启动工作区中，并由 try-with-resources 在成功和失败路径清理。上传项目仍只经过静态分析，不触发构建脚本。
 
 `AnalysisBundleJsonWriter` 将同一个不可变 `ProjectProfile` 分别交给健康报告和行动计划 writer，再嵌入组合 schema。Web 页面因此无需重复扫描，也不会出现报告分数与行动队列跨时刻分叉。

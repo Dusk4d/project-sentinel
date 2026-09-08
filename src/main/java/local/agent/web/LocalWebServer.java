@@ -19,6 +19,7 @@ import local.agent.WorkspaceAgent;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -84,6 +85,11 @@ public final class LocalWebServer implements AutoCloseable {
                 send(exchange, 403, "application/json; charset=utf-8", "{\"error\":\"invalid host\"}\n");
                 return;
             }
+            String origin = exchange.getRequestHeaders().getFirst("Origin");
+            if (origin != null && !allowedOrigin(origin, port())) {
+                send(exchange, 403, "application/json; charset=utf-8", "{\"error\":\"cross-origin request denied\"}\n");
+                return;
+            }
             handler.handle(exchange);
         });
     }
@@ -96,6 +102,24 @@ public final class LocalWebServer implements AutoCloseable {
         String name = colon < 0 ? host : host.substring(0, colon);
         if (colon >= 0 && !validPortSuffix(host.substring(colon))) return false;
         return name.equals("127.0.0.1") || name.equals("localhost");
+    }
+
+    static boolean allowedOrigin(String value, int serverPort) {
+        if (value == null || value.isBlank() || value.equalsIgnoreCase("null")) return false;
+        try {
+            URI origin = URI.create(value.strip());
+            if (!"http".equalsIgnoreCase(origin.getScheme()) || origin.getUserInfo() != null
+                    || origin.getQuery() != null || origin.getFragment() != null) return false;
+            String path = origin.getPath();
+            if (path != null && !path.isEmpty()) return false;
+            String host = origin.getHost();
+            if (host == null || !(host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1")
+                    || host.equals("::1") || host.equals("[::1]")))
+                return false;
+            return (origin.getPort() < 0 ? 80 : origin.getPort()) == serverPort;
+        } catch (IllegalArgumentException malformed) {
+            return false;
+        }
     }
 
     private static boolean validPortSuffix(String suffix) {

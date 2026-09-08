@@ -48,4 +48,35 @@ final class LocalWebServerHostTest {
             }
         }
     }
+
+    @Test void acceptsOnlySameLoopbackOriginAndPort() {
+        assertTrue(LocalWebServer.allowedOrigin("http://127.0.0.1:8787", 8787));
+        assertTrue(LocalWebServer.allowedOrigin("http://localhost:8787", 8787));
+        assertTrue(LocalWebServer.allowedOrigin("http://[::1]:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("https://127.0.0.1:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("http://127.0.0.1:9999", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("http://evil.example", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("null", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("not a URI", 8787));
+    }
+
+    @Test void rejectsCrossOriginBrowserRequestsBeforeRouting() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "demo");
+        try (var server = new LocalWebServer(workspace, 0); var client = java.net.http.HttpClient.newHttpClient()) {
+            server.start();
+            var endpoint = java.net.URI.create(server.url() + "api/analysis");
+            var denied = client.send(java.net.http.HttpRequest.newBuilder(endpoint)
+                            .header("Origin", "https://evil.example")
+                            .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(403, denied.statusCode());
+            assertTrue(denied.body().contains("cross-origin"));
+
+            var allowed = client.send(java.net.http.HttpRequest.newBuilder(endpoint)
+                            .header("Origin", server.url().substring(0, server.url().length() - 1))
+                            .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, allowed.statusCode());
+        }
+    }
 }
