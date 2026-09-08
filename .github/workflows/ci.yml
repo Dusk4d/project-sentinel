@@ -20,5 +20,21 @@ jobs:
           cache: maven
       - name: Test and package with pinned Maven Wrapper
         run: ./mvnw --batch-mode --no-transfer-progress clean verify
+      - name: Publish test failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          found=false
+          for report in target/surefire-reports/*.txt; do
+            test -f "$report" || continue
+            if grep -Eq 'Failures: [1-9]|Errors: [1-9]' "$report"; then
+              found=true
+              summary=$(tr '\n' ' ' < "$report" | cut -c1-4000)
+              echo "::error file=$report,title=JUnit failure::$summary"
+            fi
+          done
+          if ! $found; then
+            echo "::error title=Maven failure::No failing Surefire text report was produced; inspect the Maven step."
+          fi
       - name: Verify CLI artifact
         run: java -jar target/workspace-agent-0.2.0.jar --version
