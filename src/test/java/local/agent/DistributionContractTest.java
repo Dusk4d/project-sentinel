@@ -14,7 +14,11 @@ final class DistributionContractTest {
         String assembly = read("src/assembly/distribution.xml");
         assertTrue(pom.contains("<artifactId>maven-assembly-plugin</artifactId>"));
         assertTrue(pom.contains("<version>3.8.0</version>"));
+        assertTrue(pom.contains("<artifactId>cyclonedx-maven-plugin</artifactId>"));
+        assertTrue(pom.contains("<version>2.9.3</version>"));
+        assertTrue(pom.contains("<includeBomSerialNumber>false</includeBomSerialNumber>"));
         assertTrue(assembly.contains("<outputFileNameMapping>workspace-agent.jar</outputFileNameMapping>"));
+        assertTrue(assembly.contains("<include>bom.json</include>"));
         assertTrue(assembly.contains("<include>README.md</include>"));
         assertTrue(assembly.contains("<include>LICENSE</include>"));
         assertTrue(assembly.contains("${project.basedir}/src/distribution"));
@@ -41,10 +45,12 @@ final class DistributionContractTest {
         assertTrue(ci.contains("actions/upload-artifact@v7"));
         assertTrue(ci.contains("sha256sum"));
         assertTrue(ci.contains("if-no-files-found: error"));
+        assertTrue(ci.contains("target/bom.json"));
         assertTrue(release.contains("tags:"));
         assertTrue(release.contains("test \"v$version\" = \"$GITHUB_REF_NAME\""));
         assertTrue(release.contains("gh release create"));
         assertTrue(release.contains("--verify-tag"));
+        assertTrue(release.contains("project-sentinel-*-bom.json.sha256"));
     }
 
     private String read(String relative) throws Exception {

@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+### Added
+
+- 构建生成可复现 CycloneDX 1.6 JSON SBOM，并随 ZIP、CI 制品和正式 Release 分发。
+
 ## 0.3.0 - 2026-09-09
 
 ### Added

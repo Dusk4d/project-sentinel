@@ -16,6 +16,11 @@
     </dependencySets>
     <fileSets>
         <fileSet>
+            <directory>${project.build.directory}</directory>
+            <outputDirectory>/</outputDirectory>
+            <includes><include>bom.json</include></includes>
+        </fileSet>
+        <fileSet>
             <directory>${project.basedir}/src/distribution</directory>
             <outputDirectory>/</outputDirectory>
             <fileMode>0755</fileMode>

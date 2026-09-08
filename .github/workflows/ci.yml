@@ -48,6 +48,8 @@ jobs:
           test -n "$root"
           sh -n "$root/project-sentinel.sh" "$root/start-web.sh"
           "$root/project-sentinel.sh" --version
+          test -s "$root/bom.json"
+          grep -q '"bomFormat" : "CycloneDX"' "$root/bom.json"
           sha256sum "$archive" > "$archive.sha256"
       - name: Upload verified distribution
         uses: actions/upload-artifact@v7
@@ -56,6 +58,7 @@ jobs:
           path: |
             target/project-sentinel-*-distribution.zip
             target/project-sentinel-*-distribution.zip.sha256
+            target/bom.json
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
