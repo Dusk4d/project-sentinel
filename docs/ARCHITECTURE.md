@@ -75,4 +75,6 @@ ZIP 上传使用独立的 `ZipProjectUpload` 边界：请求体、条目数、�
 
 `CommandLine` 是公开 CLI 契约的单一注册点，负责命令最小参数校验、版本号与帮助文本，避免未知选项被误判为交互式工作区路径。
 
+Maven `package` 阶段使用固定版本的 Assembly Plugin 生成独立 ZIP，内含可执行 JAR、Windows/Unix 启动器和用户文档。CI 解压后再次运行分发包而非只检查构建目录 JAR，并生成 SHA-256；`v*` 标签还必须与应用版本完全一致才允许创建 Release。
+
 路径安全采用两层校验：`WorkspaceGuard` 同时检查词法规范化路径和现有文件的真实路径；`ProjectAnalyzer` 只接收真实路径仍位于项目根目录内的常规文件。这样即使工作区中存在指向外部的符号链接或目录联接，也不会读取目标内容。

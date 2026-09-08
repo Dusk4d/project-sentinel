@@ -1,0 +1,42 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Test and package
+        run: ./mvnw --batch-mode --no-transfer-progress clean verify
+      - name: Verify tag matches application version
+        shell: bash
+        run: |
+          version=$(java -jar target/workspace-agent-*.jar --version | awk '{print $3}')
+          test "v$version" = "$GITHUB_REF_NAME"
+      - name: Build checksum and smoke-test distribution
+        shell: bash
+        run: |
+          archive="target/project-sentinel-${GITHUB_REF_NAME#v}-distribution.zip"
+          sha256sum "$archive" > "$archive.sha256"
+          mkdir -p target/release-smoke
+          unzip -q "$archive" -d target/release-smoke
+          root="target/release-smoke/project-sentinel-${GITHUB_REF_NAME#v}"
+          sh -n "$root/project-sentinel.sh" "$root/start-web.sh"
+          "$root/project-sentinel.sh" --version
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" target/project-sentinel-*-distribution.zip target/project-sentinel-*-distribution.zip.sha256 --verify-tag --generate-notes

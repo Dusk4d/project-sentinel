@@ -37,4 +37,24 @@ jobs:
             echo "::error title=Maven failure::No failing Surefire text report was produced; inspect the Maven step."
           fi
       - name: Verify CLI artifact
-        run: java -jar target/workspace-agent-0.2.0.jar --version
+        run: java -jar target/workspace-agent-*.jar --version
+      - name: Verify distribution and checksum
+        shell: bash
+        run: |
+          archive=$(find target -maxdepth 1 -name 'project-sentinel-*-distribution.zip' -print -quit)
+          test -n "$archive"
+          unzip -q "$archive" -d target/distribution-smoke
+          root=$(find target/distribution-smoke -mindepth 1 -maxdepth 1 -type d -print -quit)
+          test -n "$root"
+          sh -n "$root/project-sentinel.sh" "$root/start-web.sh"
+          "$root/project-sentinel.sh" --version
+          sha256sum "$archive" > "$archive.sha256"
+      - name: Upload verified distribution
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-sentinel
+          path: |
+            target/project-sentinel-*-distribution.zip
+            target/project-sentinel-*-distribution.zip.sha256
+          if-no-files-found: error
+          retention-days: 14

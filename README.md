@@ -20,6 +20,8 @@ README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_C
 
 ## 运行
 
+正式分发包由 `mvnw package` 生成在 `target/project-sentinel-<版本>-distribution.zip`。解压后无需 Maven 或源码：Windows 运行 `project-sentinel.cmd --help`，Linux/macOS 运行 `./project-sentinel.sh --help`；本地看板分别使用包内的 `start-web.cmd` 或 `./start-web.sh`。运行时仍要求 Java 21。
+
 Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，可在页面选择项目、扫描健康度，并使用“项目问答（RAG）”查询启动方式或代码位置；回答会展示来源路径和行号。关闭窗口或按 `Ctrl+C` 停止。
 
 也可以在 PowerShell 中指定工作区和端口：
@@ -226,7 +228,7 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 - 支持扫描结果缓存和增量分析。
 - 增加工具循环的可恢复执行检查点。
 - 为模型增强问答增加可选流式输出。
-- 增加更完善的自动化测试和打包发布流程。
+- 增加 SBOM、构件签名和发布来源证明。
 
 产品背景见 [docs/VISION.md](docs/VISION.md)，设计边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，威胁模型见 [docs/SECURITY.md](docs/SECURITY.md)。
 
