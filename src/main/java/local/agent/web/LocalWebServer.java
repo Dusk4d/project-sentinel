@@ -1,6 +1,7 @@
 package local.agent.web;
 
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import local.agent.analysis.ProjectAnalyzer;
 import local.agent.analysis.ProjectDiscovery;
@@ -44,17 +45,45 @@ public final class LocalWebServer implements AutoCloseable {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         executor = Executors.newVirtualThreadPerTaskExecutor();
         server.setExecutor(executor);
-        server.createContext("/api/health", this::health);
-        server.createContext("/api/projects", this::projects);
-        server.createContext("/api/analysis", this::analysis);
-        server.createContext("/api/upload-analysis", this::uploadAnalysis);
-        server.createContext("/api/report", this::report);
-        server.createContext("/", this::page);
+        createContext("/api/health", this::health);
+        createContext("/api/projects", this::projects);
+        createContext("/api/analysis", this::analysis);
+        createContext("/api/upload-analysis", this::uploadAnalysis);
+        createContext("/api/report", this::report);
+        createContext("/", this::page);
     }
 
     public void start() { server.start(); }
     public int port() { return server.getAddress().getPort(); }
     public String url() { return "http://127.0.0.1:" + port() + "/"; }
+
+    private void createContext(String path, HttpHandler handler) {
+        server.createContext(path, exchange -> {
+            if (!allowedHost(exchange.getRequestHeaders().getFirst("Host"))) {
+                send(exchange, 403, "application/json; charset=utf-8", "{\"error\":\"invalid host\"}\n");
+                return;
+            }
+            handler.handle(exchange);
+        });
+    }
+
+    static boolean allowedHost(String value) {
+        if (value == null || value.isBlank()) return false;
+        String host = value.strip().toLowerCase(java.util.Locale.ROOT);
+        if (host.startsWith("[::1]")) return host.length() == 5 || validPortSuffix(host.substring(5));
+        int colon = host.lastIndexOf(':');
+        String name = colon < 0 ? host : host.substring(0, colon);
+        if (colon >= 0 && !validPortSuffix(host.substring(colon))) return false;
+        return name.equals("127.0.0.1") || name.equals("localhost");
+    }
+
+    private static boolean validPortSuffix(String suffix) {
+        if (suffix.length() < 2 || suffix.charAt(0) != ':') return false;
+        try {
+            int port = Integer.parseInt(suffix.substring(1));
+            return port >= 1 && port <= 65_535;
+        } catch (NumberFormatException ignored) { return false; }
+    }
 
     private void health(HttpExchange exchange) throws IOException {
         if (!exactPath(exchange, "/api/health")) { notFound(exchange); return; }
