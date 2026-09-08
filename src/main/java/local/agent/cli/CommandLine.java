@@ -33,6 +33,7 @@ public final class CommandLine {
                   java -jar workspace-agent.jar --plan-json <项目>
                   java -jar workspace-agent.jar --report <项目> <报告目录>
                   java -jar workspace-agent.jar --report-html <项目> <HTML文件>
+                  java -jar workspace-agent.jar --serve <项目> [端口]
                   java -jar workspace-agent.jar --portfolio <工作区>
                   java -jar workspace-agent.jar --portfolio-daily <工作区> <状态目录> [最低分]
                   java -jar workspace-agent.jar --snapshot <项目> <历史文件>
@@ -57,6 +58,7 @@ public final class CommandLine {
         result.put("--plan-json", exact(2));
         result.put("--report", exact(3));
         result.put("--report-html", exact(3));
+        result.put("--serve", new CommandSpec(2, 3));
         result.put("--portfolio", exact(2));
         result.put("--portfolio-daily", new CommandSpec(3, 4));
         result.put("--snapshot", exact(3));

@@ -29,6 +29,7 @@ import local.agent.report.ConfigSummaryWriter;
 import local.agent.report.RuleCatalogWriter;
 import local.agent.report.ActionPlanJsonWriter;
 import local.agent.report.DailyRunManifestStore;
+import local.agent.web.LocalWebServer;
 
 public final class Main {
     public static void main(String[] args) {
@@ -68,6 +69,11 @@ public final class Main {
         }
         if (args.length >= 3 && args[0].equals("--report-html")) {
             runHtmlReport(Path.of(args[1]), Path.of(args[2]));
+            return;
+        }
+        if (args.length >= 2 && args[0].equals("--serve")) {
+            int port = args.length >= 3 ? parsePort(args[2]) : 8787;
+            runServer(Path.of(args[1]), port);
             return;
         }
         if (args.length >= 2 && args[0].equals("--portfolio")) {
@@ -387,5 +393,29 @@ public final class Main {
         if (!result.hadRiskBaseline()) System.out.println("风险回归门禁: 无上次风险基线，本次作为基线");
         else System.out.println("风险回归门禁: " + (result.riskRegressionPassed() ? "通过" : "未通过")
                 + "（新增未豁免高风险规则 " + result.newHighRiskRuleIds() + "）");
+    }
+
+    private static int parsePort(String value) {
+        try {
+            int port = Integer.parseInt(value);
+            if (port < 1 || port > 65_535) throw new NumberFormatException();
+            return port;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("端口必须是 1 到 65535 之间的整数");
+        }
+    }
+
+    private static void runServer(Path project, int port) {
+        try (var server = new LocalWebServer(project, port)) {
+            server.start();
+            System.out.println("Workspace Agent 本地服务已启动: " + server.url());
+            System.out.println("按 Ctrl+C 停止。服务仅监听本机回环地址。");
+            new java.util.concurrent.CountDownLatch(1).await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            System.err.println("本地服务启动失败: " + e.getMessage());
+            System.exit(1);
+        }
     }
 }

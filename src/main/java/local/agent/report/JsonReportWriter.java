@@ -47,7 +47,7 @@ public final class JsonReportWriter {
         return out.append("]\n}\n").toString();
     }
 
-    static String quote(String value) {
+    public static String quote(String value) {
         var out = new StringBuilder("\"");
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);

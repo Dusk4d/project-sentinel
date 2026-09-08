@@ -48,6 +48,9 @@ java -cp target/classes local.agent.Main --report D:\path\to\project D:\path\to\
 # 生成无需服务器、可直接用浏览器打开的单文件 HTML 看板
 java -jar target/workspace-agent-0.2.0.jar --report-html D:\path\to\project D:\path\to\dashboard.html
 
+# 启动带“重新扫描”按钮的本地 Web 后端与看板；默认端口 8787
+java -jar target/workspace-agent-0.2.0.jar --serve D:\path\to\project 8787
+
 # 扫描一个目录下可识别的多个项目，按健康分排序
 java -cp target/classes local.agent.Main --portfolio D:\path\to\workspace
 
@@ -84,6 +87,10 @@ java -jar target/workspace-agent-0.2.0.jar --list-rules
 ```
 
 使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项、缺少参数或多余参数会输出帮助并返回退出码 `2`；所有参数都必须被明确消费，避免定时脚本的拼写错误被静默忽略。
+
+`--serve` 启动后访问 `http://127.0.0.1:8787/`。服务只绑定本机回环地址，不接受其他电脑连接；页面和 `/api/report` 每次按需执行静态只读分析，不执行被扫描项目。`/api/health` 可用于确认后端存活。按 `Ctrl+C` 停止服务。页面响应明确声明 UTF-8，因此不受 PowerShell 代码页影响。
+
+Windows CLI 输出遵循 JVM 检测到的终端原生编码。若你在启动 Java 后又手工切换了代码页，请重新打开终端，或确保 `chcp` 与 Java 的 `stdout.encoding` 一致。
 
 `--daily` 退出码约定：`0` 表示通过，`1` 表示运行故障，`2` 表示参数错误，`3` 表示质量门禁失败，`4` 表示构建失败，`5` 表示构建超时，`6` 表示同一状态目录已有任务运行。该约定便于任务计划程序和 CI 可靠判断结果。
 
