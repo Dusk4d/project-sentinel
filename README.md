@@ -41,7 +41,7 @@ Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它�
 
 ```powershell
 .\mvnw.cmd package
-java -jar target/workspace-agent-0.2.0.jar D:\path\to\workspace
+java -jar target/workspace-agent-0.3.0.jar D:\path\to\workspace
 ```
 
 进入交互界面后可输入：
@@ -60,80 +60,80 @@ java -jar target/workspace-agent-0.2.0.jar D:\path\to\workspace
 java -cp target/classes local.agent.Main --check D:\path\to\project
 
 # 输出带版本号的机器可读 JSON，适合脚本、看板和 CI
-java -jar target/workspace-agent-0.2.0.jar --check-json D:\path\to\project
+java -jar target/workspace-agent-0.3.0.jar --check-json D:\path\to\project
 
 # 输出按风险和预计恢复分值排序的行动计划
-java -jar target/workspace-agent-0.2.0.jar --plan D:\path\to\project
+java -jar target/workspace-agent-0.3.0.jar --plan D:\path\to\project
 
 # 输出版本化的机器可读行动计划
-java -jar target/workspace-agent-0.2.0.jar --plan-json D:\path\to\project
+java -jar target/workspace-agent-0.3.0.jar --plan-json D:\path\to\project
 
 # 以原子写入方式保存带时间戳的报告
 java -cp target/classes local.agent.Main --report D:\path\to\project D:\path\to\reports
 
 # 生成无需服务器、可直接用浏览器打开的单文件 HTML 看板
-java -jar target/workspace-agent-0.2.0.jar --report-html D:\path\to\project D:\path\to\dashboard.html
+java -jar target/workspace-agent-0.3.0.jar --report-html D:\path\to\project D:\path\to\dashboard.html
 
 # 启动带项目选择和“重新扫描”按钮的本地 Web 后端与看板；默认端口 8787
-java -jar target/workspace-agent-0.2.0.jar --serve D:\path\to\workspace 8787
+java -jar target/workspace-agent-0.3.0.jar --serve D:\path\to\workspace 8787
 
 # 输出可供模型使用的 Function Calling 工具定义
-java -jar target/workspace-agent-0.2.0.jar --tools-json D:\path\to\workspace
+java -jar target/workspace-agent-0.3.0.jar --tools-json D:\path\to\workspace
 
 # 结构化调用一个工具（包含空格的输入需要引号）
-java -jar target/workspace-agent-0.2.0.jar --call D:\path\to\workspace read README.md
+java -jar target/workspace-agent-0.3.0.jar --call D:\path\to\workspace read README.md
 
 # 使用本地 RAG 回答项目问题；也可用 --ask-json 获取机器可读结果
-java -jar target/workspace-agent-0.2.0.jar --ask D:\path\to\workspace "项目怎么启动？"
-java -jar target/workspace-agent-0.2.0.jar --ask-json D:\path\to\workspace "项目怎么启动？"
+java -jar target/workspace-agent-0.3.0.jar --ask D:\path\to\workspace "项目怎么启动？"
+java -jar target/workspace-agent-0.3.0.jar --ask-json D:\path\to\workspace "项目怎么启动？"
 
 # 可选：使用兼容 OpenAI Chat Completions 的模型增强 RAG
 $env:SENTINEL_MODEL_BASE_URL = "http://127.0.0.1:11434/v1"
 $env:SENTINEL_MODEL_NAME = "本机已安装的模型名"
 # 仅需要鉴权的服务才设置 SENTINEL_MODEL_API_KEY；不要写入仓库文件
-java -jar target/workspace-agent-0.2.0.jar --ask-ai D:\path\to\workspace "项目怎么启动？"
+java -jar target/workspace-agent-0.3.0.jar --ask-ai D:\path\to\workspace "项目怎么启动？"
 
 # 在同一窗口执行 start-web.cmd 后，页面也会启用“使用模型增强”复选框
 
 # 真正的 Function Calling 循环：模型自主选择只读工具并汇总结果
-java -jar target/workspace-agent-0.2.0.jar --agent-ai D:\path\to\workspace "检查项目如何启动，并指出依据"
+java -jar target/workspace-agent-0.3.0.jar --agent-ai D:\path\to\workspace "检查项目如何启动，并指出依据"
 
 # 带持久记忆的 Function Calling；状态目录与项目目录分开指定
-java -jar target/workspace-agent-0.2.0.jar --agent-ai-memory D:\path\to\workspace D:\path\to\agent-state "继续分析上次发现的问题"
+java -jar target/workspace-agent-0.3.0.jar --agent-ai-memory D:\path\to\workspace D:\path\to\agent-state "继续分析上次发现的问题"
 
 # 扫描一个目录下可识别的多个项目，按健康分排序
 java -cp target/classes local.agent.Main --portfolio D:\path\to\workspace
 
 # 生成稳定的多项目 Markdown、HTML、JSON 看板，并以最低项目分执行门禁
-java -jar target/workspace-agent-0.2.0.jar --portfolio-daily D:\path\to\workspace D:\path\to\portfolio-state 70
+java -jar target/workspace-agent-0.3.0.jar --portfolio-daily D:\path\to\workspace D:\path\to\portfolio-state 70
 
 # 多项目模式默认向下发现 4 层目录中的构建清单或 Git 仓库
 
 # 追加结构化健康快照，并展示跨日趋势
-java -jar target/workspace-agent-0.2.0.jar --snapshot D:\path\to\project D:\path\to\history.tsv
-java -jar target/workspace-agent-0.2.0.jar --trend D:\path\to\history.tsv
+java -jar target/workspace-agent-0.3.0.jar --snapshot D:\path\to\project D:\path\to\history.tsv
+java -jar target/workspace-agent-0.3.0.jar --trend D:\path\to\history.tsv
 
 # 推荐给定时任务：一次完成报告、快照、趋势和质量门禁
 # 末尾的 5 表示相比上次快照最多允许下降 5 分；省略时不限制降幅
-java -jar target/workspace-agent-0.2.0.jar --daily D:\path\to\project D:\path\to\agent-state 80 5
+java -jar target/workspace-agent-0.3.0.jar --daily D:\path\to\project D:\path\to\agent-state 80 5
 
 # 显式执行项目测试；默认超时 120 秒，最大 1800 秒
-java -jar target/workspace-agent-0.2.0.jar --verify-build D:\path\to\project 120
+java -jar target/workspace-agent-0.3.0.jar --verify-build D:\path\to\project 120
 
 # 显式执行“静态日报 + 真实构建”，保存最新与历史构建证据
-java -jar target/workspace-agent-0.2.0.jar --daily-verify D:\path\to\project D:\path\to\agent-state 80 120 5
+java -jar target/workspace-agent-0.3.0.jar --daily-verify D:\path\to\project D:\path\to\agent-state 80 120 5
 
 # 查询状态目录当前是否被任务占用，并显示进程、开始时间和操作类型
-java -jar target/workspace-agent-0.2.0.jar --state-status D:\path\to\agent-state
+java -jar target/workspace-agent-0.3.0.jar --state-status D:\path\to\agent-state
 
 # 创建带注释的项目配置模板；已存在时绝不覆盖
-java -jar target/workspace-agent-0.2.0.jar --init-config D:\path\to\project
+java -jar target/workspace-agent-0.3.0.jar --init-config D:\path\to\project
 
 # 不扫描源码，只校验配置并显示最终生效值
-java -jar target/workspace-agent-0.2.0.jar --validate-config D:\path\to\project
+java -jar target/workspace-agent-0.3.0.jar --validate-config D:\path\to\project
 
 # 列出可用于禁用和豁免的全部稳定规则 ID
-java -jar target/workspace-agent-0.2.0.jar --list-rules
+java -jar target/workspace-agent-0.3.0.jar --list-rules
 ```
 
 使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项、缺少参数或多余参数会输出帮助并返回退出码 `2`；所有参数都必须被明确消费，避免定时脚本的拼写错误被静默忽略。
