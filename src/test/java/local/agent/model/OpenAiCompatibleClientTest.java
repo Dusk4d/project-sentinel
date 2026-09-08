@@ -8,6 +8,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -41,5 +42,21 @@ final class OpenAiCompatibleClientTest {
         assertThrows(java.io.IOException.class, () -> OpenAiCompatibleClient.extractContent("{\"choices\":[]}"));
         assertThrows(java.io.IOException.class, () -> OpenAiCompatibleClient.extractContent(
                 "{\"choices\":[{\"message\":{\"content\":\"bad\\q\"}}]}"));
+    }
+
+    @Test void rejectsOversizedRequestBeforeContactingModel() throws Exception {
+        var contacted = new AtomicBoolean();
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> { contacted.set(true); exchange.close(); });
+        server.start();
+        try {
+            var config = new ModelConfig(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"),
+                    "test", "", Duration.ofSeconds(3));
+            var client = new OpenAiCompatibleClient(config);
+            var failure = assertThrows(java.io.IOException.class,
+                    () -> client.complete("system", "中".repeat(OpenAiCompatibleClient.MAX_REQUEST_BYTES)));
+            assertTrue(failure.getMessage().contains("1 MiB"));
+            assertFalse(contacted.get());
+        } finally { server.stop(0); }
     }
 }

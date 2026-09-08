@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class OpenAiCompatibleClient {
+    static final int MAX_REQUEST_BYTES = 1024 * 1024;
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
     private final ModelConfig config;
     private final HttpClient client;
@@ -30,6 +31,7 @@ public final class OpenAiCompatibleClient {
                 + ",\"temperature\":0.1,\"messages\":[{\"role\":\"system\",\"content\":"
                 + JsonReportWriter.quote(system) + "},{\"role\":\"user\",\"content\":"
                 + JsonReportWriter.quote(user) + "}]}";
+        requireBoundedRequest(body);
         var builder = HttpRequest.newBuilder(config.endpoint()).timeout(config.timeout())
                 .header("Content-Type", "application/json; charset=utf-8")
                 .header("Accept", "application/json");
@@ -82,6 +84,7 @@ public final class OpenAiCompatibleClient {
     }
 
     private String send(String body) throws IOException, InterruptedException {
+        requireBoundedRequest(body);
         var builder = requestBuilder();
         var response = client.send(builder.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
                 HttpResponse.BodyHandlers.ofInputStream());
@@ -91,6 +94,11 @@ public final class OpenAiCompatibleClient {
         if (response.statusCode() < 200 || response.statusCode() >= 300)
             throw new IOException("模型服务返回 HTTP " + response.statusCode());
         return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private static void requireBoundedRequest(String body) throws IOException {
+        if (body.getBytes(StandardCharsets.UTF_8).length > MAX_REQUEST_BYTES)
+            throw new IOException("模型请求超过 1 MiB 限制");
     }
 
     private HttpRequest.Builder requestBuilder() {

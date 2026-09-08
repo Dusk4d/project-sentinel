@@ -69,7 +69,7 @@ ZIP 上传使用独立的 `ZipProjectUpload` 边界：请求体、条目数、�
 
 `LocalRagService` 在每次查询时构建有界内存索引。文本按 10 行分块、2 行重叠，英文按词、中文按字符和双字词切分，再以 BM25 风格相关度排序。结果是带相对路径和行号的证据集合；`RagAnswer` 只抽取最高相关片段，不把检索内容解释为可执行指令。索引文件数、块数和单文件大小均有硬上限。
 
-`AiRagService` 是可选生成层：先运行本地检索，仅在存在证据时调用 `OpenAiCompatibleClient`。客户端使用 JDK HTTP API 请求 Chat Completions 兼容端点，设置连接/请求超时及 2 MiB 响应上限；模型不可用时保留证据并降级为抽取式回答。模型与 API 密钥只从进程环境读取，不成为基础离线路径的依赖。
+`AiRagService` 是可选生成层：先运行本地检索，仅在存在证据时调用 `OpenAiCompatibleClient`。客户端使用 JDK HTTP API 请求 Chat Completions 兼容端点，设置连接/请求超时、1 MiB 请求上限及 2 MiB 响应上限；模型不可用时保留证据并降级为抽取式回答。模型与 API 密钥只从进程环境读取，不成为基础离线路径的依赖。
 
 `ToolCallingAgentService` 实现完整的 Chat Completions 工具调用循环。它发送 `FunctionRegistry` 的工具 Schema，解析 assistant `tool_calls`，严格校验 `{input: string}` 参数，通过 `WorkspaceAgent` 调度，并把受限工具结果作为 tool 消息加入下一轮。通用 `JsonCodec` 负责结构化解析，不依赖字段顺序或字符串搜索。模型轮次、单轮及总调用数均有硬上限。
 
