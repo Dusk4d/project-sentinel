@@ -7,6 +7,9 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 jobs:
   release:
@@ -40,6 +43,19 @@ jobs:
           grep -q '"bomFormat" : "CycloneDX"' "$root/bom.json"
           cp "$root/bom.json" "target/project-sentinel-${GITHUB_REF_NAME#v}-bom.json"
           sha256sum "target/project-sentinel-${GITHUB_REF_NAME#v}-bom.json" > "target/project-sentinel-${GITHUB_REF_NAME#v}-bom.json.sha256"
+      - name: Attest release artifact provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            target/project-sentinel-*-distribution.zip
+            target/project-sentinel-*-distribution.zip.sha256
+            target/project-sentinel-*-bom.json
+            target/project-sentinel-*-bom.json.sha256
+      - name: Attest distribution SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: target/project-sentinel-*-distribution.zip
+          sbom-path: target/project-sentinel-*-bom.json
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

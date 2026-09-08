@@ -24,6 +24,8 @@ README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_C
 
 构建同时生成 CycloneDX 1.6 JSON `target/bom.json`，并将其放入发行 ZIP；正式 Release 还单独提供版本化 SBOM 及 SHA-256，便于供应链清点和安全工具消费。
 
+标签发布还会通过 GitHub Artifact Attestations 为 ZIP、SBOM 及校验文件生成 SLSA 来源证明，并将 CycloneDX SBOM 与发行 ZIP 绑定。下载后可运行 `gh attestation verify project-sentinel-<版本>-distribution.zip --repo Dusk4d/project-sentinel` 验证构件确由本仓库发布工作流生成。
+
 应用版本以 `pom.xml` 为唯一来源，构建时写入运行时资源，并由 CLI、发行包和标签发布共同校验。构建产物使用固定时间戳；在相同源码和工具链下连续构建会产生相同的 JAR 与 ZIP 校验和。
 
 Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，可在页面选择项目、扫描健康度，并使用本地 RAG、模型增强 RAG 或 Function Calling Agent。关闭窗口或按 `Ctrl+C` 停止。
@@ -238,7 +240,7 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 - 支持扫描结果缓存和增量分析。
 - 增加工具循环的可恢复执行检查点。
 - 为模型增强问答增加可选流式输出。
-- 增加 SBOM、构件签名和发布来源证明。
+- 增加可选的离线构件签名与签名密钥轮换流程。
 
 产品背景见 [docs/VISION.md](docs/VISION.md)，设计边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，威胁模型见 [docs/SECURITY.md](docs/SECURITY.md)，上线、监控、升级与回滚见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
 

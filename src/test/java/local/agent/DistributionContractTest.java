@@ -51,6 +51,16 @@ final class DistributionContractTest {
         assertTrue(release.contains("gh release create"));
         assertTrue(release.contains("--verify-tag"));
         assertTrue(release.contains("project-sentinel-*-bom.json.sha256"));
+        assertTrue(release.contains("id-token: write"));
+        assertTrue(release.contains("attestations: write"));
+        assertTrue(release.contains("artifact-metadata: write"));
+        assertEquals(2, occurrences(release, "uses: actions/attest@v4"));
+        assertTrue(release.contains("subject-path: target/project-sentinel-*-distribution.zip"));
+        assertTrue(release.contains("sbom-path: target/project-sentinel-*-bom.json"));
+    }
+
+    private int occurrences(String text, String needle) {
+        return (text.length() - text.replace(needle, "").length()) / needle.length();
     }
 
     private String read(String relative) throws Exception {

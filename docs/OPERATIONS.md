@@ -12,6 +12,14 @@ Project Sentinel 是单机、单用户工具。Web 服务只监听回环地址�
 4. 对目标项目运行 `project-sentinel.cmd --check-json <项目>`，确认退出码为 0 且 JSON 可解析。
 5. 启动 Web 后访问 `/api/health`，确认 `status` 为 `UP`、工作区和项目数量符合预期。
 
+从 GitHub Release 下载时，除核对同名 `.sha256` 外，建议安装 GitHub CLI 后验证构件来源：
+
+```powershell
+gh attestation verify .\project-sentinel-0.3.1-distribution.zip --repo Dusk4d/project-sentinel
+```
+
+把示例版本替换为实际下载版本。验证成功表示 ZIP 摘要与本仓库标签发布工作流生成的签名来源证明一致；它不能替代运行环境安全检查。
+
 ## 启动与停止
 
 Windows：
