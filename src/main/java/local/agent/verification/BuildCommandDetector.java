@@ -7,7 +7,7 @@ import java.util.List;
 public final class BuildCommandDetector implements BuildCommandProvider {
     private final boolean windows;
     public BuildCommandDetector() { this(System.getProperty("os.name", "").toLowerCase().contains("win")); }
-    BuildCommandDetector(boolean windows) { this.windows = windows; }
+    public BuildCommandDetector(boolean windows) { this.windows = windows; }
 
     @Override public List<String> detect(Path project) {
         if (Files.isRegularFile(project.resolve(windows ? "mvnw.cmd" : "mvnw")))

@@ -10,12 +10,21 @@ import static org.junit.jupiter.api.Assertions.*;
 final class BuildCommandDetectorTest {
     @TempDir Path project;
 
-    @Test void prefersWrapperAndDetectsCommonEcosystems() throws Exception {
+    @Test void detectsWindowsWrapperAndFallsBackToSystemMaven() throws Exception {
         Files.writeString(project.resolve("pom.xml"), "<project/>");
         Files.writeString(project.resolve("mvnw.cmd"), "wrapper");
-        assertTrue(new BuildCommandDetector().detect(project).contains("mvnw.cmd"));
+        assertEquals("cmd.exe", new BuildCommandDetector(true).detect(project).get(0));
+        assertTrue(new BuildCommandDetector(true).detect(project).contains("mvnw.cmd"));
         Files.delete(project.resolve("mvnw.cmd"));
-        assertTrue(new BuildCommandDetector().detect(project).stream().anyMatch(s -> s.contains("mvn")));
+        assertEquals("mvn.cmd", new BuildCommandDetector(true).detect(project).get(0));
+    }
+
+    @Test void detectsUnixWrapperAndFallsBackToSystemMaven() throws Exception {
+        Files.writeString(project.resolve("pom.xml"), "<project/>");
+        Files.writeString(project.resolve("mvnw"), "wrapper");
+        assertEquals("./mvnw", new BuildCommandDetector(false).detect(project).get(0));
+        Files.delete(project.resolve("mvnw"));
+        assertEquals("mvn", new BuildCommandDetector(false).detect(project).get(0));
     }
 
     @Test void returnsEmptyForUnknownProject() { assertTrue(new BuildCommandDetector().detect(project).isEmpty()); }

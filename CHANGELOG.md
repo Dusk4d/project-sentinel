@@ -33,6 +33,7 @@
 ### Fixed
 
 - 恢复 Unix Maven Wrapper 可执行位并升级 GitHub Actions 运行时，修复 Linux CI 的退出码 126。
+- 构建命令检测测试显式覆盖 Windows 和 Unix，消除依赖测试宿主系统的错误断言。
 
 - 严格拒绝 CLI 多余参数，避免用户输入被静默忽略。
 - 文件数恰好等于扫描上限时不再误报结果截断。
