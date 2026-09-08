@@ -18,6 +18,8 @@ final class DistributionContractTest {
         assertTrue(assembly.contains("<include>README.md</include>"));
         assertTrue(assembly.contains("<include>LICENSE</include>"));
         assertTrue(assembly.contains("${project.basedir}/src/distribution"));
+        assertTrue(assembly.contains("${project.basedir}/docs"));
+        assertTrue(Files.isRegularFile(Path.of("docs/OPERATIONS.md")));
     }
 
     @Test void binaryLaunchersRunTheBundledJarWithoutMaven() throws Exception {

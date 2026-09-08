@@ -24,7 +24,7 @@ README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_C
 
 应用版本以 `pom.xml` 为唯一来源，构建时写入运行时资源，并由 CLI、发行包和标签发布共同校验。构建产物使用固定时间戳；在相同源码和工具链下连续构建会产生相同的 JAR 与 ZIP 校验和。
 
-Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，可在页面选择项目、扫描健康度，并使用“项目问答（RAG）”查询启动方式或代码位置；回答会展示来源路径和行号。关闭窗口或按 `Ctrl+C` 停止。
+Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，可在页面选择项目、扫描健康度，并使用本地 RAG、模型增强 RAG 或 Function Calling Agent。关闭窗口或按 `Ctrl+C` 停止。
 
 也可以在 PowerShell 中指定工作区和端口：
 
@@ -238,7 +238,7 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 - 为模型增强问答增加可选流式输出。
 - 增加 SBOM、构件签名和发布来源证明。
 
-产品背景见 [docs/VISION.md](docs/VISION.md)，设计边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，威胁模型见 [docs/SECURITY.md](docs/SECURITY.md)。
+产品背景见 [docs/VISION.md](docs/VISION.md)，设计边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，威胁模型见 [docs/SECURITY.md](docs/SECURITY.md)，上线、监控、升级与回滚见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
 
 贡献约定见 [CONTRIBUTING.md](CONTRIBUTING.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。GitHub Actions 配置只授予源码只读权限，并使用 Maven Wrapper 执行同一套验证。
 
