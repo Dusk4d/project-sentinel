@@ -31,7 +31,10 @@ public final class ProjectAnalyzer {
         boolean truncated = files.size() > config.maxFiles();
         if (truncated) files.remove(files.size() - 1);
 
-        boolean readme = files.stream().anyMatch(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).startsWith("readme"));
+        var readmes = files.stream().filter(p -> p.getParent().equals(normalized))
+                .filter(this::isReadme).toList();
+        boolean readme = !readmes.isEmpty();
+        boolean readmeHasContent = readmes.stream().anyMatch(path -> hasMeaningfulText(path, config.maxTextBytes()));
         boolean build = hasAny(normalized, "pom.xml", "build.gradle", "build.gradle.kts", "package.json", "pyproject.toml", "Cargo.toml", "go.mod");
         boolean gitIgnore = Files.isRegularFile(normalized.resolve(".gitignore"));
         boolean license = files.stream().anyMatch(p -> p.getParent().equals(normalized)
@@ -44,6 +47,9 @@ public final class ProjectAnalyzer {
 
         List<Finding> findings = new ArrayList<>();
         if (!readme) add(config, findings, new Finding(RuleCatalog.DOCS_README, Severity.MEDIUM, "文档", "缺少 README，项目目标和运行方式不可发现", "项目根目录未发现 README*", "补充目标、安装、运行和测试说明"));
+        else if (!readmeHasContent) add(config, findings, new Finding(RuleCatalog.DOCS_README_EMPTY, Severity.MEDIUM, "文档",
+                "README 没有有效内容，仍无法了解项目", "项目根目录 README 文件均为空或只包含空白字符：" + readmes.stream().map(Path::getFileName).toList(),
+                "补充项目背景、安装要求、启动命令和测试方法"));
         if (!build) add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST, Severity.HIGH, "可复现性", "缺少可识别的构建清单", "未发现常见构建文件", "添加与技术栈匹配的构建配置"));
         if (!gitIgnore) add(config, findings, new Finding(RuleCatalog.VCS_GITIGNORE, Severity.LOW, "版本控制", "缺少 .gitignore", "项目根目录未发现 .gitignore", "排除构建产物、IDE 文件和本地机密"));
         if (!license) add(config, findings, new Finding(RuleCatalog.LEGAL_LICENSE, Severity.LOW, "合规", "缺少明确的软件许可证", "项目根目录未发现 LICENSE 或 COPYING", "若计划分享或开源，选择并添加合适许可证"));
@@ -100,6 +106,20 @@ public final class ProjectAnalyzer {
         if (!Files.isRegularFile(candidate)) return false;
         try { return candidate.toRealPath().startsWith(root); }
         catch (IOException e) { return false; }
+    }
+
+    private boolean hasMeaningfulText(Path file, long maxBytes) {
+        try {
+            if (Files.size(file) == 0) return false;
+            if (Files.size(file) > maxBytes) return true;
+            return !Files.readString(file, StandardCharsets.UTF_8).isBlank();
+        } catch (IOException unreadable) {
+            return true;
+        }
+    }
+
+    private boolean isReadme(Path path) {
+        return path.getFileName().toString().toLowerCase(Locale.ROOT).matches("readme([._-].*)?");
     }
 
     private boolean isSource(Path path) {

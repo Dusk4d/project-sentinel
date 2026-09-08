@@ -28,6 +28,24 @@ final class ProjectAnalyzerTest {
         assertTrue(RuleCatalog.KNOWN_IDS.containsAll(profile.findings().stream().map(f -> f.ruleId()).toList()));
     }
 
+    @Test void requiresANonEmptyReadmeAtTheProjectRoot() throws Exception {
+        Files.createDirectories(root.resolve("docs"));
+        Files.writeString(root.resolve("docs/README.md"), "nested documentation");
+        Files.writeString(root.resolve("READMEevil.md"), "misleading filename");
+        var nestedOnly = new ProjectAnalyzer().analyze(root);
+        assertFalse(nestedOnly.hasReadme());
+        assertTrue(nestedOnly.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.DOCS_README)));
+
+        Files.writeString(root.resolve("README.md"), "  \r\n\t");
+        var empty = new ProjectAnalyzer().analyze(root);
+        assertTrue(empty.hasReadme());
+        assertTrue(empty.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.DOCS_README_EMPTY)));
+
+        Files.writeString(root.resolve("README.md"), "# Useful project");
+        var documented = new ProjectAnalyzer().analyze(root);
+        assertFalse(documented.findings().stream().anyMatch(f -> f.ruleId().startsWith("docs.readme")));
+    }
+
     @Test void flagsSensitiveFileNamesWithoutReadingTheirContents() throws Exception {
         Files.writeString(root.resolve("pom.xml"), "<project/>");
         Files.writeString(root.resolve(".env"), "DO_NOT_READ=this-is-not-inspected");

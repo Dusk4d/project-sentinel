@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 
 public final class RuleCatalog {
     public static final String DOCS_README = "docs.readme";
+    public static final String DOCS_README_EMPTY = "docs.readme-empty";
     public static final String BUILD_MANIFEST = "build.manifest";
     public static final String BUILD_LOCK = "build.lock";
     public static final String AUTOMATION_CI = "automation.ci";
@@ -19,6 +20,7 @@ public final class RuleCatalog {
 
     public static final List<RuleDefinition> DEFINITIONS = List.of(
             new RuleDefinition(DOCS_README, "文档", "项目根目录缺少 README*"),
+            new RuleDefinition(DOCS_README_EMPTY, "文档", "项目根目录存在 README* 但内容为空"),
             new RuleDefinition(BUILD_MANIFEST, "可复现性", "缺少可识别的构建清单"),
             new RuleDefinition(BUILD_LOCK, "可复现性", "已识别技术栈但未锁定构建工具或依赖"),
             new RuleDefinition(AUTOMATION_CI, "自动化", "存在构建清单但未发现主流 CI 配置"),
