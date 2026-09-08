@@ -34,6 +34,7 @@ final class LocalWebServerTest {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             assertEquals(200, health.statusCode());
             assertTrue(health.body().contains("\"status\":\"UP\""));
+            assertTrue(health.body().contains("\"projectCount\":1"));
 
             var report = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/report"))
                             .POST(HttpRequest.BodyPublishers.noBody()).build(),
@@ -41,6 +42,32 @@ final class LocalWebServerTest {
             assertEquals(200, report.statusCode());
             assertTrue(report.body().contains("\"schemaVersion\": 1"));
             assertTrue(report.body().contains("\"project\": \"" + project.getFileName() + "\""));
+        }
+    }
+
+    @Test void discoversProjectsAndRejectsIdsOutsideTheStartupAllowlist() throws Exception {
+        Path first = Files.createDirectories(project.resolve("course/first"));
+        Path second = Files.createDirectories(project.resolve("course/second"));
+        Files.writeString(first.resolve("pom.xml"), "<project/>");
+        Files.writeString(second.resolve("package.json"), "{}");
+        try (var server = new LocalWebServer(project, 0); var client = HttpClient.newHttpClient()) {
+            server.start();
+            var projects = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/projects")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, projects.statusCode());
+            assertTrue(projects.body().contains("\"name\":\"first\""));
+            assertTrue(projects.body().contains("\"name\":\"second\""));
+
+            var rejected = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/report?project=root"))
+                            .POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(400, rejected.statusCode());
+            assertTrue(rejected.body().contains("unknown project id"));
+
+            var malformed = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/report?project=%25ZZ"))
+                            .POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(400, malformed.statusCode());
         }
     }
 

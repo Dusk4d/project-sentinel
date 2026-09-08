@@ -27,7 +27,7 @@ CLI 在整个日检编排期间持有 `StateRunLock`，锁粒度是规范化后�
 
 `HtmlReportWriter` 生成不依赖脚本、字体或 CDN 的离线单文件看板。所有来自项目的文本先进行 HTML 实体转义；`HtmlReportStore` 与其他状态写入一样使用同目录临时文件和原子替换。
 
-`LocalWebServer` 基于 JDK 自带 HTTP Server，仅绑定回环地址。动态页面只调用与 CLI 相同的 `ProjectAnalyzer` 和 `JsonReportWriter`，不提供任意路径参数或构建执行端点；响应固定使用 UTF-8、禁用缓存，并设置内容类型保护和限制性 CSP。
+`LocalWebServer` 基于 JDK 自带 HTTP Server，仅绑定回环地址。启动时复用有界 `ProjectDiscovery` 建立项目白名单，浏览器只能提交白名单签发的不透明 ID，不能提交任意文件系统路径。动态页面只调用与 CLI 相同的 `ProjectAnalyzer` 和 `JsonReportWriter`，不提供构建执行端点；响应固定使用 UTF-8、禁用缓存，并设置内容类型保护和限制性 CSP。
 
 `AtomicTextStore` 统一稳定输出文件的写入语义。每日运行只替换 Agent 状态目录内的 `latest.html` 和 `latest.json`，时间戳 Markdown 与 TSV 历史仅追加，不执行自动清理。
 
