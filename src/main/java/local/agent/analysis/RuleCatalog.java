@@ -8,6 +8,7 @@ public final class RuleCatalog {
     public static final String DOCS_README = "docs.readme";
     public static final String DOCS_README_EMPTY = "docs.readme-empty";
     public static final String BUILD_MANIFEST = "build.manifest";
+    public static final String BUILD_MANIFEST_EMPTY = "build.manifest-empty";
     public static final String BUILD_LOCK = "build.lock";
     public static final String AUTOMATION_CI = "automation.ci";
     public static final String VCS_GITIGNORE = "vcs.gitignore";
@@ -22,6 +23,7 @@ public final class RuleCatalog {
             new RuleDefinition(DOCS_README, "文档", "项目根目录缺少 README*"),
             new RuleDefinition(DOCS_README_EMPTY, "文档", "项目根目录存在 README* 但内容为空"),
             new RuleDefinition(BUILD_MANIFEST, "可复现性", "缺少可识别的构建清单"),
+            new RuleDefinition(BUILD_MANIFEST_EMPTY, "可复现性", "存在受支持的构建清单但内容为空"),
             new RuleDefinition(BUILD_LOCK, "可复现性", "已识别技术栈但未锁定构建工具或依赖"),
             new RuleDefinition(AUTOMATION_CI, "自动化", "存在构建清单但未发现主流 CI 配置"),
             new RuleDefinition(VCS_GITIGNORE, "版本控制", "项目根目录缺少 .gitignore"),

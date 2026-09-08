@@ -74,6 +74,19 @@ final class ProjectAnalyzerTest {
         assertFalse(locked.findings().stream().anyMatch(f -> f.message().contains("版本未锁定")));
     }
 
+    @Test void rejectsWhitespaceOnlyBuildManifestAsAUsableBuildCapability() throws Exception {
+        Files.writeString(root.resolve("pom.xml"), " \r\n\t");
+        var empty = new ProjectAnalyzer().analyze(root);
+        assertFalse(empty.hasBuildFile());
+        assertFalse(empty.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.BUILD_MANIFEST)));
+        assertTrue(empty.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.BUILD_MANIFEST_EMPTY)));
+
+        Files.writeString(root.resolve("pom.xml"), "<project/>");
+        var usable = new ProjectAnalyzer().analyze(root);
+        assertTrue(usable.hasBuildFile());
+        assertFalse(usable.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.BUILD_MANIFEST_EMPTY)));
+    }
+
     @Test void reportsMissingCiAndRecognizesGithubWorkflowWithoutReadingIt() throws Exception {
         Files.writeString(root.resolve("pom.xml"), "<project/>");
         var missing = new ProjectAnalyzer().analyze(root);

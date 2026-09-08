@@ -6,6 +6,8 @@ Project Sentinel 是一个基于 Java 21 的本地项目健康检查与行动规
 
 README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_CN.md` 等分隔变体。空文件和纯空白内容会单独报告；嵌套文件或 `READMEevil.md` 一类相似前缀不能制造“文档已完成”的假象。
 
+构建能力同样要求受支持的根目录清单至少包含非空白内容；空 `pom.xml`、`package.json` 等会触发高风险 `build.manifest-empty`，且不会继续派生 CI 和依赖锁定噪声。这里只验证“具备可解析内容的前提”，真实可构建性仍应通过显式构建验证确认。
+
 ## 运行
 
 Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在缺少 JAR 时自动调用 Maven Wrapper 构建。启动后访问 `http://127.0.0.1:8787/`，关闭窗口或按 `Ctrl+C` 停止。

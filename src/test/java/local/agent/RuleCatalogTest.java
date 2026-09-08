@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class RuleCatalogTest {
     @Test void definitionsHaveUniqueKnownIdsAndRenderableHelp() {
-        assertEquals(12, RuleCatalog.DEFINITIONS.size());
+        assertEquals(13, RuleCatalog.DEFINITIONS.size());
         assertEquals(RuleCatalog.DEFINITIONS.size(), RuleCatalog.KNOWN_IDS.size());
         String output = new RuleCatalogWriter().render();
         for (var rule : RuleCatalog.DEFINITIONS) {

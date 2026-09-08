@@ -16,6 +16,8 @@ import local.agent.config.AnalyzerConfig;
 
 public final class ProjectAnalyzer {
     private static final Set<String> SOURCE_EXTENSIONS = Set.of(".java", ".kt", ".py", ".js", ".ts", ".go", ".rs", ".c", ".cpp");
+    private static final List<String> BUILD_MANIFEST_NAMES = List.of("pom.xml", "build.gradle", "build.gradle.kts",
+            "package.json", "pyproject.toml", "Cargo.toml", "go.mod");
     private static final Pattern ACTION_MARKER = Pattern.compile("(?:^|\\s)(?://|#|/\\*|\\*)\\s*(TODO|FIXME|HACK)\\b", Pattern.CASE_INSENSITIVE);
 
     public ProjectProfile analyze(Path root) throws IOException {
@@ -35,7 +37,10 @@ public final class ProjectAnalyzer {
                 .filter(this::isReadme).toList();
         boolean readme = !readmes.isEmpty();
         boolean readmeHasContent = readmes.stream().anyMatch(path -> hasMeaningfulText(path, config.maxTextBytes()));
-        boolean build = hasAny(normalized, "pom.xml", "build.gradle", "build.gradle.kts", "package.json", "pyproject.toml", "Cargo.toml", "go.mod");
+        var buildManifests = BUILD_MANIFEST_NAMES.stream().map(normalized::resolve)
+                .filter(path -> isSafeRegularFile(normalized, path)).toList();
+        boolean buildManifestPresent = !buildManifests.isEmpty();
+        boolean build = buildManifests.stream().anyMatch(path -> hasMeaningfulText(path, config.maxTextBytes()));
         boolean gitIgnore = Files.isRegularFile(normalized.resolve(".gitignore"));
         boolean license = files.stream().anyMatch(p -> p.getParent().equals(normalized)
                 && p.getFileName().toString().toLowerCase(Locale.ROOT).matches("license([._-].*)?|copying([._-].*)?"));
@@ -50,13 +55,16 @@ public final class ProjectAnalyzer {
         else if (!readmeHasContent) add(config, findings, new Finding(RuleCatalog.DOCS_README_EMPTY, Severity.MEDIUM, "文档",
                 "README 没有有效内容，仍无法了解项目", "项目根目录 README 文件均为空或只包含空白字符：" + readmes.stream().map(Path::getFileName).toList(),
                 "补充项目背景、安装要求、启动命令和测试方法"));
-        if (!build) add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST, Severity.HIGH, "可复现性", "缺少可识别的构建清单", "未发现常见构建文件", "添加与技术栈匹配的构建配置"));
+        if (!buildManifestPresent) add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST, Severity.HIGH, "可复现性", "缺少可识别的构建清单", "未发现常见构建文件", "添加与技术栈匹配的构建配置"));
+        else if (!build) add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST_EMPTY, Severity.HIGH, "可复现性",
+                "构建清单没有有效内容，项目无法据此构建", "项目根目录构建清单均为空或只包含空白字符：" + buildManifests.stream().map(Path::getFileName).toList(),
+                "写入有效构建配置，并通过对应构建工具执行编译和测试"));
         if (!gitIgnore) add(config, findings, new Finding(RuleCatalog.VCS_GITIGNORE, Severity.LOW, "版本控制", "缺少 .gitignore", "项目根目录未发现 .gitignore", "排除构建产物、IDE 文件和本地机密"));
         if (!license) add(config, findings, new Finding(RuleCatalog.LEGAL_LICENSE, Severity.LOW, "合规", "缺少明确的软件许可证", "项目根目录未发现 LICENSE 或 COPYING", "若计划分享或开源，选择并添加合适许可证"));
         if (build && !hasCi(normalized)) add(config, findings, new Finding(RuleCatalog.AUTOMATION_CI, Severity.LOW, "自动化",
                 "项目可构建但未发现 CI 配置", "未发现 GitHub Actions、GitLab CI、Azure Pipelines、CircleCI、Jenkins、Buildkite 或 Bitbucket Pipelines 配置",
                 "添加至少执行编译和测试的 CI 流水线"));
-        addReproducibilityFinding(normalized, ecosystem, findings, config);
+        if (build) addReproducibilityFinding(normalized, ecosystem, findings, config);
         var sensitive = files.stream().filter(this::hasSensitiveName).map(normalized::relativize).limit(5).toList();
         if (!sensitive.isEmpty()) add(config, findings, new Finding(RuleCatalog.SECURITY_SENSITIVE_FILE, Severity.HIGH, "安全", "发现可能包含密钥或本地配置的敏感文件名",
                 "仅检查文件名，未读取内容：" + sensitive, "确认文件未被提交，并通过示例配置和环境变量替代真实凭据"));
