@@ -19,6 +19,7 @@ final class CommandLineTest {
         assertTrue(CommandLine.validate(new String[]{"--ask-json", "project", "如何启动"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--ask-ai", "project", "如何启动"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--agent-ai", "project", "分析启动方式"}).isEmpty());
+        assertTrue(CommandLine.validate(new String[]{"--agent-ai-memory", "project", "state", "分析启动方式"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--daily", "project", "state", "80"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--daily", "project", "state", "80", "5"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--daily-verify", "project", "state", "80", "120", "5"}).isEmpty());
@@ -32,6 +33,7 @@ final class CommandLineTest {
         assertTrue(CommandLine.usage().contains("--call <工作区> <工具名> <输入>"));
         assertTrue(CommandLine.usage().contains("--ask-ai <工作区> <问题>"));
         assertTrue(CommandLine.usage().contains("--agent-ai <工作区> <任务>"));
+        assertTrue(CommandLine.usage().contains("--agent-ai-memory <工作区> <状态目录> <任务>"));
     }
 
     @Test void rejectsUnknownMissingAndUnexpectedArguments() {

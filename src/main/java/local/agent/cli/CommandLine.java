@@ -40,6 +40,7 @@ public final class CommandLine {
                   java -jar workspace-agent.jar --ask-json <工作区> <问题>
                   java -jar workspace-agent.jar --ask-ai <工作区> <问题>
                   java -jar workspace-agent.jar --agent-ai <工作区> <任务>
+                  java -jar workspace-agent.jar --agent-ai-memory <工作区> <状态目录> <任务>
                   java -jar workspace-agent.jar --portfolio <工作区>
                   java -jar workspace-agent.jar --portfolio-daily <工作区> <状态目录> [最低分]
                   java -jar workspace-agent.jar --snapshot <项目> <历史文件>
@@ -71,6 +72,7 @@ public final class CommandLine {
         result.put("--ask-json", exact(3));
         result.put("--ask-ai", exact(3));
         result.put("--agent-ai", exact(3));
+        result.put("--agent-ai-memory", exact(4));
         result.put("--portfolio", exact(2));
         result.put("--portfolio-daily", new CommandSpec(3, 4));
         result.put("--snapshot", exact(3));

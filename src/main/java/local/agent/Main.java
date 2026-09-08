@@ -35,6 +35,8 @@ import local.agent.model.AiRagService;
 import local.agent.model.ModelConfig;
 import local.agent.model.OpenAiCompatibleClient;
 import local.agent.model.ToolCallingAgentService;
+import local.agent.model.AgentMemoryEntry;
+import local.agent.model.AgentMemoryStore;
 
 public final class Main {
     public static void main(String[] args) {
@@ -74,6 +76,10 @@ public final class Main {
         }
         if (args.length == 3 && args[0].equals("--agent-ai")) {
             runToolCallingAgent(Path.of(args[1]), args[2]);
+            return;
+        }
+        if (args.length == 4 && args[0].equals("--agent-ai-memory")) {
+            runToolCallingAgentWithMemory(Path.of(args[1]), Path.of(args[2]), args[3]);
             return;
         }
         if (args.length >= 2 && args[0].equals("--check")) {
@@ -485,5 +491,22 @@ public final class Main {
             System.out.print(new ToolCallingAgentService(agent, model).run(task).renderText());
         } catch (IllegalArgumentException e) { System.err.println("Agent 参数或模型配置错误: " + e.getMessage()); System.exit(2); }
         catch (Exception e) { System.err.println("Function Calling Agent 失败: " + e.getMessage()); System.exit(1); }
+    }
+
+    private static void runToolCallingAgentWithMemory(Path workspace, Path stateDirectory, String task) {
+        try {
+            var config = ModelConfig.fromEnvironment();
+            try (var ignored = StateRunLock.acquire(stateDirectory, "agent-ai-memory")) {
+                var memory = new AgentMemoryStore(workspace, stateDirectory);
+                var agent = new WorkspaceAgent(workspace);
+                var model = new OpenAiCompatibleClient(config);
+                var result = new ToolCallingAgentService(agent, model).run(task, memory.readRecent(5));
+                memory.append(new AgentMemoryEntry(java.time.Instant.now(), task, result.answer(), result.modelRounds(), result.toolCalls()));
+                System.out.print(result.renderText());
+                System.out.println("记忆文件：" + memory.file());
+            }
+        } catch (RunAlreadyActiveException e) { System.err.println(e.getMessage()); System.exit(6); }
+        catch (IllegalArgumentException e) { System.err.println("Agent 参数或模型配置错误: " + e.getMessage()); System.exit(2); }
+        catch (Exception e) { System.err.println("带记忆 Agent 失败: " + e.getMessage()); System.exit(1); }
     }
 }

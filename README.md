@@ -94,6 +94,9 @@ java -jar target/workspace-agent-0.2.0.jar --ask-ai D:\path\to\workspace "项目
 # 真正的 Function Calling 循环：模型自主选择只读工具并汇总结果
 java -jar target/workspace-agent-0.2.0.jar --agent-ai D:\path\to\workspace "检查项目如何启动，并指出依据"
 
+# 带持久记忆的 Function Calling；状态目录与项目目录分开指定
+java -jar target/workspace-agent-0.2.0.jar --agent-ai-memory D:\path\to\workspace D:\path\to\agent-state "继续分析上次发现的问题"
+
 # 扫描一个目录下可识别的多个项目，按健康分排序
 java -cp target/classes local.agent.Main --portfolio D:\path\to\workspace
 
@@ -144,6 +147,8 @@ Web RAG 接口为 `POST /api/rag?project=<项目ID>`，只接受 UTF-8 `text/pla
 模型已配置时，`POST /api/rag-ai?project=<项目ID>` 使用相同的请求与安全边界。`/api/projects` 和 `/api/health` 只通过 `modelEnabled` 布尔值公开能力状态，不公开端点、模型名或密钥。模型失败时接口返回带降级原因的本地回答。
 
 `--agent-ai` 的单次模型响应最多接受 8 个工具调用，整次任务最多 5 个模型轮次和 20 个工具调用。工具参数必须严格符合只包含字符串 `input` 的封闭 Schema；超过限制、参数畸形或模型未完成任务都会明确失败，不会无限循环。
+
+`--agent-ai-memory` 在显式状态目录中维护 `agent-memory.json`。文件绑定规范化工作区，使用原子替换，最多 100 条且不超过 1 MiB；每次只向模型注入最近 5 条经过二次截断的任务与回答。损坏、版本不兼容、时间倒序或属于其他项目的记忆会被拒绝。该文件包含用户任务和模型回答，可能带有项目摘要，应放在访问受控的位置；删除该文件即可清空记忆。
 
 Windows CLI 输出遵循 JVM 检测到的终端原生编码。若你在启动 Java 后又手工切换了代码页，请重新打开终端，或确保 `chcp` 与 Java 的 `stdout.encoding` 一致。
 
@@ -219,7 +224,7 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 
 - 增加带审批策略的文件创建与补丁工具。
 - 支持扫描结果缓存和增量分析。
-- 增加任务历史、记忆和可恢复执行状态。
+- 增加工具循环的可恢复执行检查点。
 - 为模型增强问答增加可选流式输出。
 - 增加更完善的自动化测试和打包发布流程。
 

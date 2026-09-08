@@ -61,6 +61,21 @@ final class ToolCallingAgentServiceTest {
         } finally { server.stop(0); }
     }
 
+    @Test void includesBoundedConversationMemoryBeforeCurrentTask() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "demo");
+        var requests = new ArrayList<String>();
+        var server = scriptedServer(List.of("{\"choices\":[{\"message\":{\"content\":\"新的回答\"}}]}"), requests);
+        try {
+            var history = List.of(new AgentMemoryEntry(java.time.Instant.parse("2026-01-01T00:00:00Z"),
+                    "旧问题", "旧答案", 1, 0));
+            var result = service(server).run("追问", history);
+            assertEquals("新的回答", result.answer());
+            assertTrue(requests.get(0).contains("历史任务：旧问题"));
+            assertTrue(requests.get(0).contains("历史回答：旧答案"));
+            assertTrue(requests.get(0).indexOf("历史任务") < requests.get(0).indexOf("追问"));
+        } finally { server.stop(0); }
+    }
+
     private ToolCallingAgentService service(HttpServer server) {
         var config = new ModelConfig(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"),
                 "test", "", Duration.ofSeconds(3));
