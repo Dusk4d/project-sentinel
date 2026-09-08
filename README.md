@@ -18,7 +18,7 @@ README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_C
 
 ## 运行
 
-Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，关闭窗口或按 `Ctrl+C` 停止。
+Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，可在页面选择项目、扫描健康度，并使用“项目问答（本地 RAG）”查询启动方式或代码位置；回答会展示来源路径和行号。关闭窗口或按 `Ctrl+C` 停止。
 
 也可以在 PowerShell 中指定工作区和端口：
 
@@ -125,6 +125,8 @@ java -jar target/workspace-agent-0.2.0.jar --list-rules
 Web 项目目录最多保留 200 项，只有确认发现第 201 项时才标记截断并在页面提示缩小工作区。非 Web 组合发现上限为 1000，超过时直接失败，避免以不完整清单执行质量门禁。
 
 同一 Web 进程一次只执行一个扫描请求，避免多个标签页同时遍历磁盘。忙碌时分析接口返回 HTTP `429` 和 `Retry-After: 1`；`/api/health` 仍可用，并通过 `scanBusy` 暴露当前状态。
+
+Web RAG 接口为 `POST /api/rag?project=<项目ID>`，只接受 UTF-8 `text/plain`，问题请求体最多 8 KiB，并与健康扫描共享单实例准入控制和启动时生成的项目白名单。
 
 Windows CLI 输出遵循 JVM 检测到的终端原生编码。若你在启动 Java 后又手工切换了代码页，请重新打开终端，或确保 `chcp` 与 Java 的 `stdout.encoding` 一致。
 

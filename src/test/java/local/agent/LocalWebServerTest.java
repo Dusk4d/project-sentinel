@@ -32,6 +32,9 @@ final class LocalWebServerTest {
             assertTrue(page.body().contains("上传 ZIP 检测"));
             assertTrue(page.body().contains("id=\"download\" disabled>下载 JSON"));
             assertTrue(page.body().contains("-sentinel-analysis.json"));
+            assertTrue(page.body().contains("项目问答（本地 RAG）"));
+            assertTrue(page.body().contains("id=\"question\""));
+            assertTrue(page.body().contains("fetch('/api/rag?project='"));
 
             var health = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/health")).GET().build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));

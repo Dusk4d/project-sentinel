@@ -8,6 +8,8 @@ import local.agent.analysis.ProjectDiscovery;
 import local.agent.analysis.ProjectDiscoveryResult;
 import local.agent.report.JsonReportWriter;
 import local.agent.report.AnalysisBundleJsonWriter;
+import local.agent.WorkspaceGuard;
+import local.agent.rag.LocalRagService;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -22,6 +24,7 @@ import java.util.concurrent.Executors;
 
 public final class LocalWebServer implements AutoCloseable {
     private static final int MAX_WEB_PROJECTS = 200;
+    private static final int MAX_RAG_QUESTION_BYTES = 8 * 1024;
     private final Path workspace;
     private final List<Path> projects;
     private final boolean projectsTruncated;
@@ -49,6 +52,7 @@ public final class LocalWebServer implements AutoCloseable {
         createContext("/api/projects", this::projects);
         createContext("/api/analysis", this::analysis);
         createContext("/api/upload-analysis", this::uploadAnalysis);
+        createContext("/api/rag", this::rag);
         createContext("/api/report", this::report);
         createContext("/", this::page);
     }
@@ -156,6 +160,44 @@ public final class LocalWebServer implements AutoCloseable {
         send(exchange, 200, "text/html; charset=utf-8", HTML);
     }
 
+    private void rag(HttpExchange exchange) throws IOException {
+        if (!exactPath(exchange, "/api/rag")) { notFound(exchange); return; }
+        if (!method(exchange, "POST")) return;
+        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (contentType == null || !contentType.toLowerCase(java.util.Locale.ROOT).startsWith("text/plain")) {
+            send(exchange, 415, "application/json; charset=utf-8", "{\"error\":\"Content-Type must be text/plain\"}\n");
+            return;
+        }
+        Path project = selectedProject(exchange);
+        if (project == null) {
+            send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
+            return;
+        }
+        var lease = scanGate.tryAcquire();
+        if (lease == null) { busy(exchange); return; }
+        try (lease) {
+            String question = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
+            String json = new LocalRagService(new WorkspaceGuard(project)).ask(question).toJson();
+            send(exchange, 200, "application/json; charset=utf-8", json);
+        } catch (RequestTooLargeException tooLarge) {
+            send(exchange, 413, "application/json; charset=utf-8", "{\"error\":\"question exceeds 8 KiB limit\"}\n");
+        } catch (IllegalArgumentException invalid) {
+            send(exchange, 400, "application/json; charset=utf-8",
+                    "{\"error\":" + JsonReportWriter.quote(invalid.getMessage()) + "}\n");
+        } catch (Exception e) {
+            send(exchange, 500, "application/json; charset=utf-8",
+                    "{\"error\":" + JsonReportWriter.quote(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "}\n");
+        }
+    }
+
+    private String readTextBody(HttpExchange exchange, int maximumBytes) throws IOException {
+        long declared = parseContentLength(exchange.getRequestHeaders().getFirst("Content-Length"));
+        if (declared > maximumBytes) throw new RequestTooLargeException();
+        byte[] bytes = exchange.getRequestBody().readNBytes(maximumBytes + 1);
+        if (bytes.length > maximumBytes) throw new RequestTooLargeException();
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
     private void uploadAnalysis(HttpExchange exchange) throws IOException {
         if (!exactPath(exchange, "/api/upload-analysis")) { notFound(exchange); return; }
         if (!method(exchange, "POST")) return;
@@ -184,6 +226,8 @@ public final class LocalWebServer implements AutoCloseable {
         try { return Long.parseLong(value); }
         catch (NumberFormatException ignored) { return -1; }
     }
+
+    private static final class RequestTooLargeException extends IOException { }
 
     private boolean exactPath(HttpExchange exchange, String expected) {
         return exchange.getRequestURI().getPath().equals(expected);
@@ -244,8 +288,8 @@ public final class LocalWebServer implements AutoCloseable {
     private static final String HTML = """
             <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
             <title>Project Sentinel</title><style>
-            :root{color-scheme:light;font-family:Inter,"Microsoft YaHei",sans-serif;background:#f4f7fb;color:#172033}body{margin:0}.wrap{max-width:1050px;margin:auto;padding:32px 20px}header{display:flex;justify-content:space-between;align-items:center;gap:16px}h1{margin:0;font-size:28px}.controls{display:flex;flex-wrap:wrap;gap:10px}button,select{border:1px solid #cbd5e1;border-radius:10px;padding:11px 14px;font-weight:700;background:white}button{border:0;background:#2457d6;color:white;cursor:pointer}button:disabled{opacity:.55}.grid{display:grid;grid-template-columns:220px 1fr;gap:18px;margin-top:24px}.card{background:white;border:1px solid #dce4f0;border-radius:16px;padding:20px;box-shadow:0 8px 24px #1b31500d}.score{font-size:64px;font-weight:800;color:#176b45}.muted{color:#667085}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:#f6f8fc;border-radius:10px;padding:12px}.finding{border-top:1px solid #e7ebf2;padding:14px 0}.finding:first-child{border:0}.sev{font-size:12px;font-weight:800;padding:3px 8px;border-radius:99px;background:#eef2ff}.error{color:#b42318}@media(max-width:700px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}header{align-items:flex-start;flex-direction:column}.controls{width:100%}select{min-width:0;flex:1}}
-            </style></head><body><main class="wrap"><header><div><h1>Project Sentinel</h1><div id="project" class="muted">正在连接本地后端…</div><div id="catalog" class="muted"></div></div><div class="controls"><select id="projects" aria-label="选择项目"></select><button id="scan">重新扫描</button><input id="zip" type="file" accept=".zip,application/zip" hidden><button id="upload">上传 ZIP 检测</button><button id="download" disabled>下载 JSON</button></div></header><section class="grid"><div class="card"><div class="muted">健康分</div><div id="score" class="score">--</div><div id="ecosystem" class="muted"></div><div id="projection" class="muted"></div></div><div class="card"><div class="metrics"><div class="metric">文件<br><strong id="files">--</strong></div><div class="metric">源码<br><strong id="sources">--</strong></div><div class="metric">测试<br><strong id="tests">--</strong></div><div class="metric">待办<br><strong id="todos">--</strong></div></div><h2>优先行动</h2><div id="actions"></div><h2>全部发现</h2><div id="findings"></div></div></section></main><script>
+            :root{color-scheme:light;font-family:Inter,"Microsoft YaHei",sans-serif;background:#f4f7fb;color:#172033}body{margin:0}.wrap{max-width:1050px;margin:auto;padding:32px 20px}header{display:flex;justify-content:space-between;align-items:center;gap:16px}h1{margin:0;font-size:28px}.controls{display:flex;flex-wrap:wrap;gap:10px}button,select,input{border:1px solid #cbd5e1;border-radius:10px;padding:11px 14px;font-weight:700;background:white}button{border:0;background:#2457d6;color:white;cursor:pointer}button:disabled{opacity:.55}.grid{display:grid;grid-template-columns:220px 1fr;gap:18px;margin-top:24px}.card{background:white;border:1px solid #dce4f0;border-radius:16px;padding:20px;box-shadow:0 8px 24px #1b31500d}.score{font-size:64px;font-weight:800;color:#176b45}.muted{color:#667085}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:#f6f8fc;border-radius:10px;padding:12px}.finding,.evidence{border-top:1px solid #e7ebf2;padding:14px 0}.finding:first-child,.evidence:first-child{border:0}.sev{font-size:12px;font-weight:800;padding:3px 8px;border-radius:99px;background:#eef2ff}.error{color:#b42318}.ask{display:flex;gap:10px}.ask input{min-width:0;flex:1}.answer{white-space:pre-wrap;line-height:1.65}@media(max-width:700px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}header{align-items:flex-start;flex-direction:column}.controls{width:100%}select{min-width:0;flex:1}.ask{flex-direction:column}}
+            </style></head><body><main class="wrap"><header><div><h1>Project Sentinel</h1><div id="project" class="muted">正在连接本地后端…</div><div id="catalog" class="muted"></div></div><div class="controls"><select id="projects" aria-label="选择项目"></select><button id="scan">重新扫描</button><input id="zip" type="file" accept=".zip,application/zip" hidden><button id="upload">上传 ZIP 检测</button><button id="download" disabled>下载 JSON</button></div></header><section class="grid"><div class="card"><div class="muted">健康分</div><div id="score" class="score">--</div><div id="ecosystem" class="muted"></div><div id="projection" class="muted"></div></div><div class="card"><div class="metrics"><div class="metric">文件<br><strong id="files">--</strong></div><div class="metric">源码<br><strong id="sources">--</strong></div><div class="metric">测试<br><strong id="tests">--</strong></div><div class="metric">待办<br><strong id="todos">--</strong></div></div><h2>项目问答（本地 RAG）</h2><div class="ask"><input id="question" maxlength="8000" placeholder="例如：这个项目如何启动？" aria-label="项目问题"><button id="ask">问项目</button></div><div id="rag-answer" class="answer muted">答案会基于当前项目文件生成，并附带证据位置。</div><div id="rag-evidence"></div><h2>优先行动</h2><div id="actions"></div><h2>全部发现</h2><div id="findings"></div></div></section></main><script>
             const $=id=>document.getElementById(id);
             let latest=null;
             function render(bundle){
@@ -260,9 +304,10 @@ public final class LocalWebServer implements AutoCloseable {
             function showError(e){$('actions').replaceChildren();$('findings').innerHTML='<div class="error"></div>';$('findings').firstChild.textContent=e.message}
             async function scan(){const b=$('scan');b.disabled=true;b.textContent='扫描中…';try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/analysis?project='+id,{method:'POST'});const bundle=await r.json();if(!r.ok)throw Error(bundle.error||'扫描失败');render(bundle)}catch(e){showError(e)}finally{b.disabled=false;b.textContent='重新扫描'}}
             async function upload(file){if(file.size>20*1024*1024){showError(Error('ZIP 不能超过 20 MiB'));return}const b=$('upload');b.disabled=true;b.textContent='上传检测中…';try{const r=await fetch('/api/upload-analysis',{method:'POST',headers:{'Content-Type':'application/zip'},body:file});const bundle=await r.json();if(!r.ok)throw Error(bundle.error||'上传检测失败');render(bundle)}catch(e){showError(e)}finally{b.disabled=false;b.textContent='上传 ZIP 检测';$('zip').value=''}}
+            async function ask(){const q=$('question').value.trim();if(!q){$('rag-answer').textContent='请先输入问题。';return}const b=$('ask');b.disabled=true;b.textContent='检索中…';$('rag-answer').classList.remove('error');$('rag-answer').textContent='正在读取项目并查找证据…';$('rag-evidence').replaceChildren();try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/rag?project='+id,{method:'POST',headers:{'Content-Type':'text/plain; charset=utf-8'},body:q});const data=await r.json();if(!r.ok)throw Error(data.error||'问答失败');$('rag-answer').textContent=data.answer;const hits=data.evidence||[];$('rag-evidence').replaceChildren(...hits.map(hit=>{const x=document.createElement('div');x.className='evidence';const h=document.createElement('strong');h.textContent=hit.path+':'+hit.startLine+'-'+hit.endLine;const score=document.createElement('div');score.className='muted';score.textContent='相关度 '+Number(hit.score).toFixed(3);const body=document.createElement('div');body.className='answer';body.textContent=hit.text;x.append(h,score,body);return x}))}catch(e){$('rag-answer').textContent=e.message;$('rag-answer').classList.add('error')}finally{b.disabled=false;b.textContent='问项目'}}
             function download(){if(!latest)return;const safe=(latest.report.project||'project').replace(/[^a-zA-Z0-9._-]+/g,'-');const blob=new Blob([JSON.stringify(latest,null,2)+'\\n'],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=safe+'-sentinel-analysis.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),0)}
             async function init(){try{const r=await fetch('/api/projects');const d=await r.json();$('catalog').textContent=d.truncated?'项目超过 '+d.maximumProjects+' 个，仅显示前 '+d.maximumProjects+' 个；请缩小启动工作区。':'';$('projects').replaceChildren(...d.projects.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;return o}));$('projects').addEventListener('change',scan);await scan()}catch(e){$('project').textContent='后端连接失败';$('findings').textContent=e.message}}
-            $('scan').addEventListener('click',scan);$('upload').addEventListener('click',()=>$('zip').click());$('zip').addEventListener('change',()=>{if($('zip').files[0])upload($('zip').files[0])});$('download').addEventListener('click',download);init();
+            $('scan').addEventListener('click',scan);$('ask').addEventListener('click',ask);$('question').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});$('upload').addEventListener('click',()=>$('zip').click());$('zip').addEventListener('change',()=>{if($('zip').files[0])upload($('zip').files[0])});$('download').addEventListener('click',download);init();
             </script></body></html>
             """;
 }
