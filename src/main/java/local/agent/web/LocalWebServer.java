@@ -409,5 +409,6 @@ public final class LocalWebServer implements AutoCloseable {
             .replace("$('ai').disabled=!d.modelEnabled;", "$('ai').disabled=!d.modelEnabled;$('agent').disabled=!d.modelEnabled;")
             .replace("（已配置，勾选后启用）", "（模型已配置，可使用增强 RAG 与 Agent）")
             .replace("（未配置模型，使用本地抽取式回答）", "（未配置模型，使用本地 RAG）")
+            .replace("+'，工具调用：'+data.toolCalls}catch", "+'，工具调用：'+data.toolCalls;const trace=data.trace||[];$('rag-evidence').replaceChildren(...trace.map(item=>{const x=document.createElement('div');x.className='evidence';x.textContent=item.sequence+'. '+item.name+(item.success?' · 成功':' · 失败');return x}))}catch")
             .replace("$('ask').addEventListener('click',ask);", "$('ask').addEventListener('click',ask);$('agent').addEventListener('click',runAgent);");
 }

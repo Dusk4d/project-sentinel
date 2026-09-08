@@ -33,6 +33,7 @@ public final class ToolCallingAgentService {
         if (request.isEmpty()) throw new IllegalArgumentException("Agent 任务不能为空");
         if (request.length() > 8 * 1024) throw new IllegalArgumentException("Agent 任务超过 8192 字符限制");
         var messages = new ArrayList<String>();
+        var trace = new ArrayList<AgentToolTrace>();
         List<AgentMemoryEntry> recent = memory == null ? List.of() : memory.subList(Math.max(0, memory.size() - 5), memory.size());
         for (AgentMemoryEntry entry : recent) {
             messages.add("{\"role\":\"user\",\"content\":" + JsonReportWriter.quote("历史任务：" + limited(entry.task(), 2 * 1024)) + "}");
@@ -44,13 +45,14 @@ public final class ToolCallingAgentService {
             ModelTurn turn = model.completeTurn(SYSTEM, messages, workspace.toolsJson());
             if (turn.toolCalls().isEmpty()) {
                 if (turn.content().isBlank()) throw new IOException("模型既未给出回答也未调用工具");
-                return new ToolCallingAgentResult(turn.content(), round, totalCalls);
+                return new ToolCallingAgentResult(turn.content(), round, totalCalls, trace);
             }
             messages.add(turn.assistantMessageJson());
             for (ModelToolCall call : turn.toolCalls()) {
                 if (++totalCalls > MAX_TOTAL_TOOL_CALLS) throw new IOException("工具调用超过 " + MAX_TOTAL_TOOL_CALLS + " 次限制");
                 String input = parseInput(call.arguments());
                 var result = workspace.callFunction(call.id(), call.name(), input);
+                trace.add(new AgentToolTrace(totalCalls, call.name(), result.success()));
                 messages.add("{\"role\":\"tool\",\"tool_call_id\":" + JsonReportWriter.quote(call.id())
                         + ",\"content\":" + JsonReportWriter.quote(result.output()) + "}");
             }

@@ -32,12 +32,14 @@ final class ToolCallingAgentServiceTest {
             var result = service(server).run("这个项目怎么启动？");
             assertEquals(2, result.modelRounds());
             assertEquals(1, result.toolCalls());
+            assertEquals(List.of(new AgentToolTrace(1, "read", true)), result.trace());
             assertTrue(result.answer().contains("8787"));
             assertTrue(requests.get(0).contains("\"tools\":["));
             assertTrue(requests.get(0).contains("\"name\":\"read\""));
             assertTrue(requests.get(1).contains("\"role\":\"tool\""));
             assertTrue(requests.get(1).contains("start-web.cmd"));
             assertTrue(requests.get(1).contains("\"tool_call_id\":\"call_1\""));
+            assertTrue(result.renderText().contains("read [成功]"));
         } finally { server.stop(0); }
     }
 
