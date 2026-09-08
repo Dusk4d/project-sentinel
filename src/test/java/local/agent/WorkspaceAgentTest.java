@@ -19,6 +19,13 @@ final class WorkspaceAgentTest {
         assertTrue(agent.run("读取 ../secret.txt").contains("路径超出工作区"));
         assertTrue(agent.run("体检").contains("项目健康报告"));
         assertTrue(agent.run("体检").contains("缺少可识别的构建清单"));
+        assertTrue(agent.toolDefinitionsJson().contains("\"name\":\"health\""));
+        var call = agent.callFunction("call-health", "read", "note.txt");
+        assertTrue(call.success());
+        assertEquals("call-health", call.callId());
+        assertTrue(call.output().contains("hello agent"));
+        assertTrue(agent.run("问答 hello 是什么").contains("note.txt"));
+        assertTrue(agent.toolDefinitionsJson().contains("\"name\":\"rag_query\""));
         var report = new ReportStore().save(new ProjectAnalyzer().analyze(root), root.resolve("reports"));
         assertTrue(Files.isRegularFile(report));
         assertTrue(Files.readString(report).contains("健康分"));

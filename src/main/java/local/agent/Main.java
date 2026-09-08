@@ -30,6 +30,7 @@ import local.agent.report.RuleCatalogWriter;
 import local.agent.report.ActionPlanJsonWriter;
 import local.agent.report.DailyRunManifestStore;
 import local.agent.web.LocalWebServer;
+import local.agent.rag.LocalRagService;
 
 public final class Main {
     public static void main(String[] args) {
@@ -45,6 +46,22 @@ public final class Main {
         }
         if (args.length == 1 && args[0].equals("--version")) {
             System.out.println("Project Sentinel " + CommandLine.VERSION);
+            return;
+        }
+        if (args.length == 2 && args[0].equals("--tools-json")) {
+            runToolDefinitions(Path.of(args[1]));
+            return;
+        }
+        if (args.length == 4 && args[0].equals("--call")) {
+            runFunctionCall(Path.of(args[1]), args[2], args[3]);
+            return;
+        }
+        if (args.length == 3 && args[0].equals("--ask")) {
+            runRag(Path.of(args[1]), args[2], false);
+            return;
+        }
+        if (args.length == 3 && args[0].equals("--ask-json")) {
+            runRag(Path.of(args[1]), args[2], true);
             return;
         }
         if (args.length >= 2 && args[0].equals("--check")) {
@@ -417,5 +434,26 @@ public final class Main {
             System.err.println("本地服务启动失败: " + e.getMessage());
             System.exit(1);
         }
+    }
+
+    private static void runToolDefinitions(Path workspace) {
+        try { System.out.print(new WorkspaceAgent(workspace).toolDefinitionsJson()); }
+        catch (Exception e) { System.err.println("工具目录生成失败: " + e.getMessage()); System.exit(1); }
+    }
+
+    private static void runFunctionCall(Path workspace, String name, String input) {
+        try {
+            var result = new WorkspaceAgent(workspace).callFunction(null, name, input);
+            System.out.print(result.toJson());
+            if (!result.success()) System.exit(3);
+        } catch (Exception e) { System.err.println("函数调用失败: " + e.getMessage()); System.exit(1); }
+    }
+
+    private static void runRag(Path workspace, String question, boolean json) {
+        try {
+            var answer = new LocalRagService(new WorkspaceGuard(workspace)).ask(question);
+            System.out.print(json ? answer.toJson() : answer.renderText());
+        } catch (IllegalArgumentException e) { System.err.println("RAG 参数错误: " + e.getMessage()); System.exit(2); }
+        catch (Exception e) { System.err.println("RAG 检索失败: " + e.getMessage()); System.exit(1); }
     }
 }

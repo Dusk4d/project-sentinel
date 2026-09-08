@@ -20,7 +20,7 @@ public final class SearchTextTool implements Tool {
         if (query.isEmpty()) return ToolResult.error("搜索词不能为空");
         var hits = new ArrayList<String>();
         try (var paths = Files.walk(guard.root())) {
-            var files = paths.filter(Files::isRegularFile).limit(2_000).toList();
+            var files = paths.filter(this::isSafeRegularFile).limit(2_000).toList();
             for (var file : files) {
                 if (hits.size() >= 100 || Files.size(file) > 128 * 1024) continue;
                 try {
@@ -34,5 +34,11 @@ public final class SearchTextTool implements Tool {
             }
             return ToolResult.ok(hits.isEmpty() ? "未找到匹配内容" : String.join(System.lineSeparator(), hits));
         } catch (IOException e) { return ToolResult.error(e.getMessage()); }
+    }
+
+    private boolean isSafeRegularFile(java.nio.file.Path file) {
+        if (!Files.isRegularFile(file)) return false;
+        try { return file.toRealPath().startsWith(guard.root()); }
+        catch (IOException ignored) { return false; }
     }
 }
