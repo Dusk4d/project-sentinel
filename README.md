@@ -12,6 +12,8 @@ Project Sentinel 提供可由大模型或自动化编排器消费的 Function Ca
 
 本地 RAG 不依赖向量数据库或云端 embedding：它对受限文本文件分块，为英文词和中文字符/双字词建立内存索引，使用 BM25 风格评分返回最多五条证据。每条证据包含相对路径、起止行和相关度；回答为保守的抽取式摘要，并明确要求结合来源核验。`.env`、凭据、私钥、构建输出、依赖目录、超大文件和越界符号链接不会进入索引。该能力是真实的检索增强，但不等同于已经接入生成式大模型。
 
+需要生成式回答时，可选的 `--ask-ai` 会把同一批本地 RAG 证据发送给 OpenAI Chat Completions 兼容端点。该功能默认关闭，不配置环境变量就不会联网；模型故障时自动降级为本地抽取式回答。远程端点强制 HTTPS，本机 Ollama、LM Studio 等回环端点可以使用 HTTP。
+
 README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_CN.md` 等分隔变体。空文件和纯空白内容会单独报告；嵌套文件或 `READMEevil.md` 一类相似前缀不能制造“文档已完成”的假象。
 
 构建能力同样要求受支持的根目录清单至少包含非空白内容；空 `pom.xml`、`package.json` 等会触发高风险 `build.manifest-empty`，且不会继续派生 CI 和依赖锁定噪声。这里只验证“具备可解析内容的前提”，真实可构建性仍应通过显式构建验证确认。
@@ -80,6 +82,12 @@ java -jar target/workspace-agent-0.2.0.jar --call D:\path\to\workspace read READ
 # 使用本地 RAG 回答项目问题；也可用 --ask-json 获取机器可读结果
 java -jar target/workspace-agent-0.2.0.jar --ask D:\path\to\workspace "项目怎么启动？"
 java -jar target/workspace-agent-0.2.0.jar --ask-json D:\path\to\workspace "项目怎么启动？"
+
+# 可选：使用兼容 OpenAI Chat Completions 的模型增强 RAG
+$env:SENTINEL_MODEL_BASE_URL = "http://127.0.0.1:11434/v1"
+$env:SENTINEL_MODEL_NAME = "本机已安装的模型名"
+# 仅需要鉴权的服务才设置 SENTINEL_MODEL_API_KEY；不要写入仓库文件
+java -jar target/workspace-agent-0.2.0.jar --ask-ai D:\path\to\workspace "项目怎么启动？"
 
 # 扫描一个目录下可识别的多个项目，按健康分排序
 java -cp target/classes local.agent.Main --portfolio D:\path\to\workspace
@@ -203,7 +211,7 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 - 增加带审批策略的文件创建与补丁工具。
 - 支持扫描结果缓存和增量分析。
 - 增加任务历史、记忆和可恢复执行状态。
-- 接入可选的本地模型或兼容 OpenAI 协议的模型。
+- 将可选模型增强问答接入 Web 看板，并增加流式输出。
 - 增加更完善的自动化测试和打包发布流程。
 
 产品背景见 [docs/VISION.md](docs/VISION.md)，设计边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，威胁模型见 [docs/SECURITY.md](docs/SECURITY.md)。

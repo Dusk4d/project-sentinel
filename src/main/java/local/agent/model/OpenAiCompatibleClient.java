@@ -1,0 +1,89 @@
+package local.agent.model;
+
+import local.agent.report.JsonReportWriter;
+
+import java.io.IOException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+
+public final class OpenAiCompatibleClient {
+    private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+    private final ModelConfig config;
+    private final HttpClient client;
+
+    public OpenAiCompatibleClient(ModelConfig config) {
+        this(config, HttpClient.newBuilder().connectTimeout(config.timeout()).build());
+    }
+
+    OpenAiCompatibleClient(ModelConfig config, HttpClient client) {
+        this.config = config;
+        this.client = client;
+    }
+
+    public String complete(String system, String user) throws IOException, InterruptedException {
+        String body = "{\"model\":" + JsonReportWriter.quote(config.model())
+                + ",\"temperature\":0.1,\"messages\":[{\"role\":\"system\",\"content\":"
+                + JsonReportWriter.quote(system) + "},{\"role\":\"user\",\"content\":"
+                + JsonReportWriter.quote(user) + "}]}";
+        var builder = HttpRequest.newBuilder(config.endpoint()).timeout(config.timeout())
+                .header("Content-Type", "application/json; charset=utf-8")
+                .header("Accept", "application/json");
+        if (!config.apiKey().isEmpty()) builder.header("Authorization", "Bearer " + config.apiKey());
+        var response = client.send(builder.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
+                HttpResponse.BodyHandlers.ofInputStream());
+        byte[] bytes;
+        try (var stream = response.body()) { bytes = stream.readNBytes(MAX_RESPONSE_BYTES + 1); }
+        if (bytes.length > MAX_RESPONSE_BYTES) throw new IOException("模型响应超过 2 MiB 限制");
+        String json = new String(bytes, StandardCharsets.UTF_8);
+        if (response.statusCode() < 200 || response.statusCode() >= 300)
+            throw new IOException("模型服务返回 HTTP " + response.statusCode());
+        String content = extractContent(json);
+        if (content.isBlank()) throw new IOException("模型响应缺少 choices[0].message.content");
+        return content.strip();
+    }
+
+    static String extractContent(String json) throws IOException {
+        int choices = json.indexOf("\"choices\"");
+        int message = choices < 0 ? -1 : json.indexOf("\"message\"", choices);
+        int content = message < 0 ? -1 : json.indexOf("\"content\"", message);
+        int colon = content < 0 ? -1 : json.indexOf(':', content + 9);
+        int quote = colon < 0 ? -1 : skipWhitespace(json, colon + 1);
+        if (quote < 0 || quote >= json.length() || json.charAt(quote) != '"')
+            throw new IOException("模型响应缺少 choices[0].message.content");
+        return parseString(json, quote);
+    }
+
+    private static int skipWhitespace(String text, int at) {
+        while (at < text.length() && Character.isWhitespace(text.charAt(at))) at++;
+        return at;
+    }
+
+    private static String parseString(String json, int quote) throws IOException {
+        var out = new StringBuilder();
+        for (int i = quote + 1; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '"') return out.toString();
+            if (c != '\\') { out.append(c); continue; }
+            if (++i >= json.length()) break;
+            char escaped = json.charAt(i);
+            switch (escaped) {
+                case '"', '\\', '/' -> out.append(escaped);
+                case 'b' -> out.append('\b');
+                case 'f' -> out.append('\f');
+                case 'n' -> out.append('\n');
+                case 'r' -> out.append('\r');
+                case 't' -> out.append('\t');
+                case 'u' -> {
+                    if (i + 4 >= json.length()) throw new IOException("模型响应包含无效 Unicode 转义");
+                    try { out.append((char) Integer.parseInt(json.substring(i + 1, i + 5), 16)); }
+                    catch (NumberFormatException e) { throw new IOException("模型响应包含无效 Unicode 转义", e); }
+                    i += 4;
+                }
+                default -> throw new IOException("模型响应包含无效 JSON 转义");
+            }
+        }
+        throw new IOException("模型响应包含未结束的 JSON 字符串");
+    }
+}

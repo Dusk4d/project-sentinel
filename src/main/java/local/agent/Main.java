@@ -31,6 +31,9 @@ import local.agent.report.ActionPlanJsonWriter;
 import local.agent.report.DailyRunManifestStore;
 import local.agent.web.LocalWebServer;
 import local.agent.rag.LocalRagService;
+import local.agent.model.AiRagService;
+import local.agent.model.ModelConfig;
+import local.agent.model.OpenAiCompatibleClient;
 
 public final class Main {
     public static void main(String[] args) {
@@ -62,6 +65,10 @@ public final class Main {
         }
         if (args.length == 3 && args[0].equals("--ask-json")) {
             runRag(Path.of(args[1]), args[2], true);
+            return;
+        }
+        if (args.length == 3 && args[0].equals("--ask-ai")) {
+            runAiRag(Path.of(args[1]), args[2]);
             return;
         }
         if (args.length >= 2 && args[0].equals("--check")) {
@@ -455,5 +462,14 @@ public final class Main {
             System.out.print(json ? answer.toJson() : answer.renderText());
         } catch (IllegalArgumentException e) { System.err.println("RAG 参数错误: " + e.getMessage()); System.exit(2); }
         catch (Exception e) { System.err.println("RAG 检索失败: " + e.getMessage()); System.exit(1); }
+    }
+
+    private static void runAiRag(Path workspace, String question) {
+        try {
+            var rag = new LocalRagService(new WorkspaceGuard(workspace));
+            var model = new OpenAiCompatibleClient(ModelConfig.fromEnvironment());
+            System.out.print(new AiRagService(rag, model).ask(question).renderText());
+        } catch (IllegalArgumentException e) { System.err.println("模型配置错误: " + e.getMessage()); System.exit(2); }
+        catch (Exception e) { System.err.println("模型增强 RAG 失败: " + e.getMessage()); System.exit(1); }
     }
 }
