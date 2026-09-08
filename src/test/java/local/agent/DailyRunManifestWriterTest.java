@@ -10,13 +10,15 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 final class DailyRunManifestWriterTest {
     private final DailyRunResult daily = new DailyRunResult(82, 80, 90, 5,
             Path.of("report.md"), Path.of("latest.html"), Path.of("latest.json"),
-            Path.of("latest-plan.json"), Path.of("history.tsv"), "trend");
+            Path.of("latest-plan.json"), Path.of("history.tsv"), "trend", true,
+            Set.of("security.sensitive-file"), Path.of("risk.properties"));
 
     @Test void rendersStaticRegressionFailureAsCompletionContract() {
         String json = new DailyRunManifestWriter().render("daily", Instant.parse("2026-09-08T02:00:00Z"),
@@ -25,6 +27,8 @@ final class DailyRunManifestWriterTest {
         assertTrue(json.contains("\"passed\": false"));
         assertTrue(json.contains("\"expectedExitCode\": 3"));
         assertTrue(json.contains("\"scoreDrop\": 8"));
+        assertTrue(json.contains("\"newHighRiskRuleIds\": [\"security.sensitive-file\"]"));
+        assertTrue(json.contains("\"riskBaseline\": "));
         assertTrue(json.contains("\"build\": null"));
         assertTrue(json.contains("\"latestBuildJson\": null"));
     }

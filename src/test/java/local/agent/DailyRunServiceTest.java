@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -75,5 +76,26 @@ final class DailyRunServiceTest {
         assertFalse(regressed.passed());
         assertTrue(regressed.scoreDrop() > 5);
         assertThrows(IllegalArgumentException.class, () -> service.run(project, state, 0, -1));
+    }
+
+    @Test void failsWhenNewHighRiskIsHiddenByAnUnchangedScore() throws Exception {
+        Path project = Files.createDirectory(temp.resolve("offset-project"));
+        Path state = temp.resolve("offset-state");
+        var service = new DailyRunService();
+        var baseline = service.run(project, state, 0, 0);
+
+        Files.writeString(project.resolve("pom.xml"), "<project/>");
+        Files.writeString(project.resolve("mvnw"), "wrapper");
+        Files.createDirectories(project.resolve(".github/workflows"));
+        Files.writeString(project.resolve(".github/workflows/ci.yml"), "name: test");
+        Files.writeString(project.resolve(".env"), "not-read");
+        var current = service.run(project, state, 0, 0);
+
+        assertEquals(baseline.score(), current.score());
+        assertTrue(current.scoreRegressionPassed());
+        assertFalse(current.riskRegressionPassed());
+        assertFalse(current.passed());
+        assertEquals(Set.of("security.sensitive-file"), current.newHighRiskRuleIds());
+        assertTrue(Files.isRegularFile(current.riskBaseline()));
     }
 }

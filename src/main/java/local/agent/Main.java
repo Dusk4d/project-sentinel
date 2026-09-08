@@ -3,8 +3,6 @@ package local.agent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Scanner;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import local.agent.analysis.PortfolioAnalyzer;
 import local.agent.analysis.ProjectAnalyzer;
 import local.agent.report.MarkdownReportWriter;
@@ -34,8 +32,6 @@ import local.agent.report.DailyRunManifestStore;
 
 public final class Main {
     public static void main(String[] args) {
-        System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(System.err, true, StandardCharsets.UTF_8));
         var argumentError = CommandLine.validate(args);
         if (argumentError.isPresent()) {
             System.err.println(argumentError.get());
@@ -383,10 +379,13 @@ public final class Main {
 
     private static void printRegressionGate(local.agent.daily.DailyRunResult result) {
         if (result.previousScore() == null) {
-            System.out.println("回归门禁: 无上次快照，本次作为基线");
+            System.out.println("分数回归门禁: 无上次快照，本次作为基线");
         } else {
-            System.out.println("回归门禁: " + (result.regressionPassed() ? "通过" : "未通过")
+            System.out.println("分数回归门禁: " + (result.scoreRegressionPassed() ? "通过" : "未通过")
                     + "（降幅 " + result.scoreDrop() + "，最大允许 " + result.maximumScoreDrop() + "）");
         }
+        if (!result.hadRiskBaseline()) System.out.println("风险回归门禁: 无上次风险基线，本次作为基线");
+        else System.out.println("风险回归门禁: " + (result.riskRegressionPassed() ? "通过" : "未通过")
+                + "（新增未豁免高风险规则 " + result.newHighRiskRuleIds() + "）");
     }
 }

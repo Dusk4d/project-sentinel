@@ -11,6 +11,7 @@ import local.agent.report.ActionPlanJsonStore;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 
 public final class DailyRunService {
     public DailyRunResult run(Path project, Path stateDirectory, int minimumScore) throws IOException {
@@ -24,6 +25,14 @@ public final class DailyRunService {
         Path projectRoot = project.toAbsolutePath().normalize();
         Path stateRoot = stateDirectory.toAbsolutePath().normalize();
         var profile = new ProjectAnalyzer().analyze(projectRoot);
+        var riskStore = new RiskBaselineStore();
+        Path riskBaselinePath = stateRoot.resolve(RiskBaselineStore.FILE_NAME);
+        var previousRisk = riskStore.read(riskBaselinePath);
+        var currentRisk = RiskBaseline.from(profile);
+        if (previousRisk.isPresent() && !previousRisk.orElseThrow().projectRoot().equals(currentRisk.projectRoot()))
+            throw new IOException("风险基线属于其他项目: " + previousRisk.orElseThrow().projectRoot());
+        var newHighRiskRuleIds = new LinkedHashSet<>(currentRisk.highRiskRuleIds());
+        previousRisk.ifPresent(baseline -> newHighRiskRuleIds.removeAll(baseline.highRiskRuleIds()));
         Path reports = stateRoot.resolve("reports");
         Path history = stateRoot.resolve("history.tsv");
         Path report = new ReportStore().save(profile, reports);
@@ -35,7 +44,9 @@ public final class DailyRunService {
         Integer previousScore = before.isEmpty() ? null : before.get(before.size() - 1).score();
         snapshots.append(history, HealthSnapshot.from(profile));
         String trend = new TrendReporter().render(snapshots.read(history));
+        riskStore.save(riskBaselinePath, currentRisk);
         return new DailyRunResult(profile.healthScore(), minimumScore, previousScore, maximumScoreDrop,
-                report, latestHtml, latestJson, latestPlanJson, history, trend);
+                report, latestHtml, latestJson, latestPlanJson, history, trend, previousRisk.isPresent(),
+                newHighRiskRuleIds, riskBaselinePath);
     }
 }
