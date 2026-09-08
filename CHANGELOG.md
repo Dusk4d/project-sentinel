@@ -32,6 +32,8 @@
 
 ### Fixed
 
+- 恢复 Unix Maven Wrapper 可执行位并升级 GitHub Actions 运行时，修复 Linux CI 的退出码 126。
+
 - 严格拒绝 CLI 多余参数，避免用户输入被静默忽略。
 - 文件数恰好等于扫描上限时不再误报结果截断。
 - Windows CLI 不再强制 UTF-8 覆盖终端原生编码，修复代码页 936 下的中文乱码。
