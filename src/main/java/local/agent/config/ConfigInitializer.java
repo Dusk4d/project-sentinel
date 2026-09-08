@@ -8,7 +8,7 @@ import java.nio.file.StandardOpenOption;
 
 public final class ConfigInitializer {
     public static final String TEMPLATE = """
-            # Workspace Agent 项目级配置。未列出的字段继续使用内置默认值。
+            # Project Sentinel 项目级配置。未列出的字段继续使用内置默认值。
             # 额外忽略的目录名（逗号分隔，不能写路径）
             ignore.directories=generated,coverage,reports
             # 扫描资源上限

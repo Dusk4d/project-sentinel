@@ -44,7 +44,7 @@ public final class Main {
             return;
         }
         if (args.length == 1 && args[0].equals("--version")) {
-            System.out.println("Workspace Agent " + CommandLine.VERSION);
+            System.out.println("Project Sentinel " + CommandLine.VERSION);
             return;
         }
         if (args.length >= 2 && args[0].equals("--check")) {
@@ -133,7 +133,7 @@ public final class Main {
             System.exit(2);
         }
         var agent = new WorkspaceAgent(workspace);
-        System.out.println("Workspace Agent " + CommandLine.VERSION);
+        System.out.println("Project Sentinel " + CommandLine.VERSION);
         System.out.println("受限工作区: " + workspace.toAbsolutePath().normalize());
         System.out.println("输入“帮助”查看命令，输入“退出”结束。\n");
         try (var scanner = new Scanner(System.in)) {
@@ -408,7 +408,7 @@ public final class Main {
     private static void runServer(Path project, int port) {
         try (var server = new LocalWebServer(project, port)) {
             server.start();
-            System.out.println("Workspace Agent 本地服务已启动: " + server.url());
+            System.out.println("Project Sentinel 本地服务已启动: " + server.url());
             System.out.println("按 Ctrl+C 停止。服务仅监听本机回环地址。");
             new java.util.concurrent.CountDownLatch(1).await();
         } catch (InterruptedException e) {

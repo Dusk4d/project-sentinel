@@ -1,20 +1,28 @@
-# Workspace Agent
+# Project Sentinel（项目哨兵）
 
-一个基于 Java 21 的本地项目健康检查与行动规划 Agent，面向学生和个人开发者。现实问题是：项目散落在本机，README、测试、构建配置和 TODO 状态常常无人持续维护，直到交付或面试前才暴露风险。本工具在不上传源码的前提下扫描项目，给出带文件证据的风险分级和下一步行动建议。
+Project Sentinel 是一个基于 Java 21 的本地项目健康检查与行动规划 Agent，面向学生和个人开发者。现实问题是：项目散落在本机，README、测试、构建配置和 TODO 状态常常无人持续维护，直到交付或面试前才暴露风险。本工具在不上传源码的前提下扫描项目，给出带文件证据的风险分级和下一步行动建议。构件名和 Java 包暂时保留兼容名称 `workspace-agent`。
 
 当前版本完全本地运行，不需要 API 密钥，也不会把代码发送给第三方。
 
 ## 运行
 
+Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在缺少 JAR 时自动调用 Maven Wrapper 构建。启动后访问 `http://127.0.0.1:8787/`，关闭窗口或按 `Ctrl+C` 停止。
+
+也可以在 PowerShell 中指定工作区和端口：
+
 ```powershell
-mvn compile
-mvn exec:java -Dexec.args="D:\path\to\workspace"
+.\start-web.cmd D:\Desktop\Study\Project 8787
+```
+
+```powershell
+.\mvnw.cmd compile
+.\mvnw.cmd exec:java -Dexec.args="D:\path\to\workspace"
 ```
 
 打包后也可直接运行：
 
 ```powershell
-mvn package
+.\mvnw.cmd package
 java -jar target/workspace-agent-0.2.0.jar D:\path\to\workspace
 ```
 

@@ -23,7 +23,7 @@ public final class CommandLine {
 
     public static String usage() {
         return """
-                Workspace Agent %s
+                Project Sentinel %s（构件: workspace-agent）
 
                 用法:
                   java -jar workspace-agent.jar [工作区]
@@ -33,7 +33,7 @@ public final class CommandLine {
                   java -jar workspace-agent.jar --plan-json <项目>
                   java -jar workspace-agent.jar --report <项目> <报告目录>
                   java -jar workspace-agent.jar --report-html <项目> <HTML文件>
-                  java -jar workspace-agent.jar --serve <项目> [端口]
+                  java -jar workspace-agent.jar --serve <工作区> [端口]
                   java -jar workspace-agent.jar --portfolio <工作区>
                   java -jar workspace-agent.jar --portfolio-daily <工作区> <状态目录> [最低分]
                   java -jar workspace-agent.jar --snapshot <项目> <历史文件>
