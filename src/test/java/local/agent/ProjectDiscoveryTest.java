@@ -34,4 +34,22 @@ final class ProjectDiscoveryTest {
         assertThrows(IllegalArgumentException.class, () -> new ProjectDiscovery().discover(root, 0));
         assertThrows(IllegalArgumentException.class, () -> new ProjectDiscovery().discover(root, 13));
     }
+
+    @Test void provesTruncationWithOneAdditionalProjectAndStopsAtTheBound() throws Exception {
+        for (int i = 0; i < 4; i++) {
+            Path project = Files.createDirectory(root.resolve("project-" + i));
+            Files.writeString(project.resolve("pom.xml"), "<project/>");
+        }
+        var exact = new ProjectDiscovery().discoverBounded(root, 2, 4);
+        assertEquals(4, exact.projects().size());
+        assertFalse(exact.truncated());
+
+        Path extra = Files.createDirectory(root.resolve("project-extra"));
+        Files.writeString(extra.resolve("pom.xml"), "<project/>");
+        var truncated = new ProjectDiscovery().discoverBounded(root, 2, 4);
+        assertEquals(4, truncated.projects().size());
+        assertTrue(truncated.truncated());
+        assertEquals(4, truncated.maximumProjects());
+        assertThrows(IllegalArgumentException.class, () -> new ProjectDiscovery().discoverBounded(root, 2, 0));
+    }
 }

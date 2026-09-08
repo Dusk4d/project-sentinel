@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import local.agent.analysis.ProjectAnalyzer;
 import local.agent.analysis.ProjectDiscovery;
+import local.agent.analysis.ProjectDiscoveryResult;
 import local.agent.report.JsonReportWriter;
 import local.agent.report.AnalysisBundleJsonWriter;
 
@@ -19,8 +20,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class LocalWebServer implements AutoCloseable {
+    private static final int MAX_WEB_PROJECTS = 200;
     private final Path workspace;
     private final List<Path> projects;
+    private final boolean projectsTruncated;
     private final HttpServer server;
     private final ExecutorService executor;
 
@@ -28,8 +31,10 @@ public final class LocalWebServer implements AutoCloseable {
         if (port < 0 || port > 65_535) throw new IllegalArgumentException("端口必须在 0 到 65535 之间");
         this.workspace = workspace.toRealPath();
         if (!Files.isDirectory(this.workspace)) throw new IOException("工作区不是目录: " + this.workspace);
-        List<Path> discovered = new ProjectDiscovery().discover(this.workspace);
-        this.projects = discovered.isEmpty() ? List.of(this.workspace) : discovered;
+        ProjectDiscoveryResult discovery = new ProjectDiscovery().discoverBounded(this.workspace,
+                ProjectDiscovery.DEFAULT_MAX_DEPTH, MAX_WEB_PROJECTS);
+        this.projects = discovery.projects().isEmpty() ? List.of(this.workspace) : discovery.projects();
+        this.projectsTruncated = discovery.truncated();
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 0);
         executor = Executors.newVirtualThreadPerTaskExecutor();
         server.setExecutor(executor);
@@ -49,7 +54,7 @@ public final class LocalWebServer implements AutoCloseable {
         if (!method(exchange, "GET")) return;
         send(exchange, 200, "application/json; charset=utf-8",
                 "{\"status\":\"UP\",\"workspace\":" + JsonReportWriter.quote(workspace.toString())
-                        + ",\"projectCount\":" + projects.size() + "}\n");
+                        + ",\"projectCount\":" + projects.size() + ",\"projectsTruncated\":" + projectsTruncated + "}\n");
     }
 
     private void projects(HttpExchange exchange) throws IOException {
@@ -63,7 +68,9 @@ public final class LocalWebServer implements AutoCloseable {
                     .append(",\"name\":").append(JsonReportWriter.quote(project.getFileName().toString()))
                     .append(",\"path\":").append(JsonReportWriter.quote(project.toString())).append('}');
         }
-        send(exchange, 200, "application/json; charset=utf-8", out.append("]}\n").toString());
+        send(exchange, 200, "application/json; charset=utf-8",
+                out.append("],\"truncated\":").append(projectsTruncated)
+                        .append(",\"maximumProjects\":").append(MAX_WEB_PROJECTS).append("}\n").toString());
     }
 
     private void report(HttpExchange exchange) throws IOException {
@@ -163,8 +170,8 @@ public final class LocalWebServer implements AutoCloseable {
             <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
             <title>Project Sentinel</title><style>
             :root{color-scheme:light;font-family:Inter,"Microsoft YaHei",sans-serif;background:#f4f7fb;color:#172033}body{margin:0}.wrap{max-width:1050px;margin:auto;padding:32px 20px}header{display:flex;justify-content:space-between;align-items:center;gap:16px}h1{margin:0;font-size:28px}.controls{display:flex;gap:10px}button,select{border:1px solid #cbd5e1;border-radius:10px;padding:11px 14px;font-weight:700;background:white}button{border:0;background:#2457d6;color:white;cursor:pointer}button:disabled{opacity:.55}.grid{display:grid;grid-template-columns:220px 1fr;gap:18px;margin-top:24px}.card{background:white;border:1px solid #dce4f0;border-radius:16px;padding:20px;box-shadow:0 8px 24px #1b31500d}.score{font-size:64px;font-weight:800;color:#176b45}.muted{color:#667085}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:#f6f8fc;border-radius:10px;padding:12px}.finding{border-top:1px solid #e7ebf2;padding:14px 0}.finding:first-child{border:0}.sev{font-size:12px;font-weight:800;padding:3px 8px;border-radius:99px;background:#eef2ff}.error{color:#b42318}@media(max-width:700px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}header{align-items:flex-start;flex-direction:column}.controls{width:100%}select{min-width:0;flex:1}}
-            </style></head><body><main class="wrap"><header><div><h1>Project Sentinel</h1><div id="project" class="muted">正在连接本地后端…</div></div><div class="controls"><select id="projects" aria-label="选择项目"></select><button id="scan">重新扫描</button></div></header><section class="grid"><div class="card"><div class="muted">健康分</div><div id="score" class="score">--</div><div id="ecosystem" class="muted"></div><div id="projection" class="muted"></div></div><div class="card"><div class="metrics"><div class="metric">文件<br><strong id="files">--</strong></div><div class="metric">源码<br><strong id="sources">--</strong></div><div class="metric">测试<br><strong id="tests">--</strong></div><div class="metric">待办<br><strong id="todos">--</strong></div></div><h2>优先行动</h2><div id="actions"></div><h2>全部发现</h2><div id="findings"></div></div></section></main><script>
-            const $=id=>document.getElementById(id);async function scan(){const b=$('scan');b.disabled=true;b.textContent='扫描中…';try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/analysis?project='+id,{method:'POST'});const bundle=await r.json();if(!r.ok)throw Error(bundle.error||'扫描失败');const d=bundle.report,p=bundle.plan;$('project').textContent=d.root;$('score').textContent=d.healthScore;$('ecosystem').textContent=d.ecosystem;$('projection').textContent=p.actionCount?'完成行动后理论预计 '+p.projectedHealthScore+' 分（可恢复 '+p.potentialScoreRecovery+'）':'当前没有需处理的行动';for(const k of ['files','sources','tests','todos'])$(k).textContent=d.metrics[k];$('actions').replaceChildren(...p.actions.map(a=>{const x=document.createElement('div');x.className='finding';const h=document.createElement('strong');h.textContent=a.rank+'. '+a.action;const e=document.createElement('div');e.className='muted';e.textContent=a.severity+' · '+a.category+' · 预计恢复 '+a.potentialScoreGain+' 分';const why=document.createElement('div');why.textContent=a.rationale;x.append(h,e,why);return x}));$('findings').replaceChildren(...d.findings.map(f=>{const x=document.createElement('div');x.className='finding';const h=document.createElement('div');const s=document.createElement('span');s.className='sev';s.textContent=f.severity;h.append(s,' '+f.category+' · '+f.message);const e=document.createElement('div');e.className='muted';e.textContent='证据：'+f.evidence;const a=document.createElement('div');a.textContent='建议：'+f.action;x.append(h,e,a);return x}))}catch(e){$('actions').replaceChildren();$('findings').innerHTML='<div class="error"></div>';$('findings').firstChild.textContent=e.message}finally{b.disabled=false;b.textContent='重新扫描'}}async function init(){try{const r=await fetch('/api/projects');const d=await r.json();$('projects').replaceChildren(...d.projects.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;return o}));$('projects').addEventListener('change',scan);await scan()}catch(e){$('project').textContent='后端连接失败';$('findings').textContent=e.message}}$('scan').addEventListener('click',scan);init();
+            </style></head><body><main class="wrap"><header><div><h1>Project Sentinel</h1><div id="project" class="muted">正在连接本地后端…</div><div id="catalog" class="muted"></div></div><div class="controls"><select id="projects" aria-label="选择项目"></select><button id="scan">重新扫描</button></div></header><section class="grid"><div class="card"><div class="muted">健康分</div><div id="score" class="score">--</div><div id="ecosystem" class="muted"></div><div id="projection" class="muted"></div></div><div class="card"><div class="metrics"><div class="metric">文件<br><strong id="files">--</strong></div><div class="metric">源码<br><strong id="sources">--</strong></div><div class="metric">测试<br><strong id="tests">--</strong></div><div class="metric">待办<br><strong id="todos">--</strong></div></div><h2>优先行动</h2><div id="actions"></div><h2>全部发现</h2><div id="findings"></div></div></section></main><script>
+            const $=id=>document.getElementById(id);async function scan(){const b=$('scan');b.disabled=true;b.textContent='扫描中…';try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/analysis?project='+id,{method:'POST'});const bundle=await r.json();if(!r.ok)throw Error(bundle.error||'扫描失败');const d=bundle.report,p=bundle.plan;$('project').textContent=d.root;$('score').textContent=d.healthScore;$('ecosystem').textContent=d.ecosystem;$('projection').textContent=p.actionCount?'完成行动后理论预计 '+p.projectedHealthScore+' 分（可恢复 '+p.potentialScoreRecovery+'）':'当前没有需处理的行动';for(const k of ['files','sources','tests','todos'])$(k).textContent=d.metrics[k];$('actions').replaceChildren(...p.actions.map(a=>{const x=document.createElement('div');x.className='finding';const h=document.createElement('strong');h.textContent=a.rank+'. '+a.action;const e=document.createElement('div');e.className='muted';e.textContent=a.severity+' · '+a.category+' · 预计恢复 '+a.potentialScoreGain+' 分';const why=document.createElement('div');why.textContent=a.rationale;x.append(h,e,why);return x}));$('findings').replaceChildren(...d.findings.map(f=>{const x=document.createElement('div');x.className='finding';const h=document.createElement('div');const s=document.createElement('span');s.className='sev';s.textContent=f.severity;h.append(s,' '+f.category+' · '+f.message);const e=document.createElement('div');e.className='muted';e.textContent='证据：'+f.evidence;const a=document.createElement('div');a.textContent='建议：'+f.action;x.append(h,e,a);return x}))}catch(e){$('actions').replaceChildren();$('findings').innerHTML='<div class="error"></div>';$('findings').firstChild.textContent=e.message}finally{b.disabled=false;b.textContent='重新扫描'}}async function init(){try{const r=await fetch('/api/projects');const d=await r.json();$('catalog').textContent=d.truncated?'项目超过 '+d.maximumProjects+' 个，仅显示前 '+d.maximumProjects+' 个；请缩小启动工作区。':'';$('projects').replaceChildren(...d.projects.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;return o}));$('projects').addEventListener('change',scan);await scan()}catch(e){$('project').textContent='后端连接失败';$('findings').textContent=e.message}}$('scan').addEventListener('click',scan);init();
             </script></body></html>
             """;
 }

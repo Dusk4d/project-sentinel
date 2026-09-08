@@ -35,6 +35,7 @@ final class LocalWebServerTest {
             assertEquals(200, health.statusCode());
             assertTrue(health.body().contains("\"status\":\"UP\""));
             assertTrue(health.body().contains("\"projectCount\":1"));
+            assertTrue(health.body().contains("\"projectsTruncated\":false"));
 
             var report = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/report"))
                             .POST(HttpRequest.BodyPublishers.noBody()).build(),
@@ -64,6 +65,8 @@ final class LocalWebServerTest {
             assertEquals(200, projects.statusCode());
             assertTrue(projects.body().contains("\"name\":\"first\""));
             assertTrue(projects.body().contains("\"name\":\"second\""));
+            assertTrue(projects.body().contains("\"truncated\":false"));
+            assertTrue(projects.body().contains("\"maximumProjects\":200"));
 
             var rejected = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/report?project=root"))
                             .POST(HttpRequest.BodyPublishers.noBody()).build(),
