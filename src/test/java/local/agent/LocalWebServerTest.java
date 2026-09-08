@@ -29,6 +29,9 @@ final class LocalWebServerTest {
             assertEquals(200, page.statusCode());
             assertTrue(page.headers().firstValue("content-type").orElseThrow().contains("charset=utf-8"));
             assertTrue(page.body().contains("重新扫描"));
+            assertTrue(page.body().contains("上传 ZIP 检测"));
+            assertTrue(page.body().contains("id=\"download\" disabled>下载 JSON"));
+            assertTrue(page.body().contains("-sentinel-analysis.json"));
 
             var health = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/health")).GET().build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
