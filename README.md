@@ -8,7 +8,7 @@ Project Sentinel 是一个基于 Java 21 的本地项目健康检查与行动规
 
 ## AI 能力
 
-Project Sentinel 提供可由大模型或自动化编排器消费的 Function Calling 协议。`--tools-json` 输出兼容常见 function tool 结构的名称、描述和 JSON Schema 参数；`--call` 按工具名执行，并返回带调用 ID、成功状态和转义输出的版本化 JSON。目前注册 `list`、`read`、`search`、`health` 和 `rag_query` 五个只读函数。工具执行仍受同一个 `WorkspaceGuard` 约束，模型不能通过函数参数绕过工作区。
+Project Sentinel 提供可由大模型或自动化编排器消费的 Function Calling 协议。`--tools-json` 输出兼容常见 function tool 结构的名称、描述和 JSON Schema 参数；`--call` 按工具名执行，并返回带调用 ID、成功状态和转义输出的版本化 JSON。目前注册 `list`、`read`、`search`、`health` 和 `rag_query` 五个只读函数。`--agent-ai` 还会将这些 Schema 发给兼容模型，由模型选择工具，Agent 执行后把结果作为 `tool` 消息回传，直至形成最终回答。工具执行始终受同一个 `WorkspaceGuard` 约束，模型不能通过函数参数绕过工作区。
 
 本地 RAG 不依赖向量数据库或云端 embedding：它对受限文本文件分块，为英文词和中文字符/双字词建立内存索引，使用 BM25 风格评分返回最多五条证据。每条证据包含相对路径、起止行和相关度；回答为保守的抽取式摘要，并明确要求结合来源核验。`.env`、凭据、私钥、构建输出、依赖目录、超大文件和越界符号链接不会进入索引。该能力是真实的检索增强，但不等同于已经接入生成式大模型。
 
@@ -91,6 +91,9 @@ java -jar target/workspace-agent-0.2.0.jar --ask-ai D:\path\to\workspace "项目
 
 # 在同一窗口执行 start-web.cmd 后，页面也会启用“使用模型增强”复选框
 
+# 真正的 Function Calling 循环：模型自主选择只读工具并汇总结果
+java -jar target/workspace-agent-0.2.0.jar --agent-ai D:\path\to\workspace "检查项目如何启动，并指出依据"
+
 # 扫描一个目录下可识别的多个项目，按健康分排序
 java -cp target/classes local.agent.Main --portfolio D:\path\to\workspace
 
@@ -139,6 +142,8 @@ Web 项目目录最多保留 200 项，只有确认发现第 201 项时才标记
 Web RAG 接口为 `POST /api/rag?project=<项目ID>`，只接受 UTF-8 `text/plain`，问题请求体最多 8 KiB，并与健康扫描共享单实例准入控制和启动时生成的项目白名单。
 
 模型已配置时，`POST /api/rag-ai?project=<项目ID>` 使用相同的请求与安全边界。`/api/projects` 和 `/api/health` 只通过 `modelEnabled` 布尔值公开能力状态，不公开端点、模型名或密钥。模型失败时接口返回带降级原因的本地回答。
+
+`--agent-ai` 的单次模型响应最多接受 8 个工具调用，整次任务最多 5 个模型轮次和 20 个工具调用。工具参数必须严格符合只包含字符串 `input` 的封闭 Schema；超过限制、参数畸形或模型未完成任务都会明确失败，不会无限循环。
 
 Windows CLI 输出遵循 JVM 检测到的终端原生编码。若你在启动 Java 后又手工切换了代码页，请重新打开终端，或确保 `chcp` 与 Java 的 `stdout.encoding` 一致。
 

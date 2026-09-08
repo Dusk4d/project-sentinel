@@ -69,6 +69,8 @@ ZIP 上传使用独立的 `ZipProjectUpload` 边界：请求体、条目数、�
 
 `AiRagService` 是可选生成层：先运行本地检索，仅在存在证据时调用 `OpenAiCompatibleClient`。客户端使用 JDK HTTP API 请求 Chat Completions 兼容端点，设置连接/请求超时及 2 MiB 响应上限；模型不可用时保留证据并降级为抽取式回答。模型与 API 密钥只从进程环境读取，不成为基础离线路径的依赖。
 
+`ToolCallingAgentService` 实现完整的 Chat Completions 工具调用循环。它发送 `FunctionRegistry` 的工具 Schema，解析 assistant `tool_calls`，严格校验 `{input: string}` 参数，通过 `WorkspaceAgent` 调度，并把受限工具结果作为 tool 消息加入下一轮。通用 `JsonCodec` 负责结构化解析，不依赖字段顺序或字符串搜索。模型轮次、单轮及总调用数均有硬上限。
+
 `CommandLine` 是公开 CLI 契约的单一注册点，负责命令最小参数校验、版本号与帮助文本，避免未知选项被误判为交互式工作区路径。
 
 路径安全采用两层校验：`WorkspaceGuard` 同时检查词法规范化路径和现有文件的真实路径；`ProjectAnalyzer` 只接收真实路径仍位于项目根目录内的常规文件。这样即使工作区中存在指向外部的符号链接或目录联接，也不会读取目标内容。

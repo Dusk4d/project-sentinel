@@ -7,6 +7,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public final class OpenAiCompatibleClient {
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -42,6 +45,60 @@ public final class OpenAiCompatibleClient {
         String content = extractContent(json);
         if (content.isBlank()) throw new IOException("模型响应缺少 choices[0].message.content");
         return content.strip();
+    }
+
+    ModelTurn completeTurn(String system, List<String> messageJson, String toolsJson) throws IOException, InterruptedException {
+        String body = "{\"model\":" + JsonReportWriter.quote(config.model()) + ",\"temperature\":0.1,\"messages\":["
+                + "{\"role\":\"system\",\"content\":" + JsonReportWriter.quote(system) + "},"
+                + String.join(",", messageJson) + "],\"tools\":" + toolsJson + ",\"tool_choice\":\"auto\"}";
+        String response = send(body);
+        Map<String, Object> root = JsonCodec.object(JsonCodec.parse(response), "响应根值");
+        Object choicesValue = root.get("choices");
+        if (!(choicesValue instanceof List<?> choices) || choices.isEmpty()) throw new IOException("模型响应缺少 choices[0]");
+        Map<String, Object> choice = JsonCodec.object(choices.get(0), "choices[0]");
+        Map<String, Object> message = JsonCodec.object(choice.get("message"), "choices[0].message");
+        String content = message.get("content") instanceof String value ? value.strip() : "";
+        var calls = new ArrayList<ModelToolCall>();
+        Object callsValue = message.get("tool_calls");
+        if (callsValue instanceof List<?> list) {
+            if (list.size() > 8) throw new IOException("单轮模型工具调用超过 8 个限制");
+            for (Object item : list) {
+                Map<String, Object> call = JsonCodec.object(item, "tool_calls[]");
+                Map<String, Object> function = JsonCodec.object(call.get("function"), "tool_calls[].function");
+                String id = requiredString(call, "id");
+                String name = requiredString(function, "name");
+                String arguments = requiredString(function, "arguments");
+                if (arguments.length() > 16 * 1024) throw new IOException("工具参数超过 16 KiB 限制");
+                calls.add(new ModelToolCall(id, name, arguments));
+            }
+        }
+        return new ModelTurn(content, List.copyOf(calls), JsonCodec.write(message));
+    }
+
+    private static String requiredString(Map<String, Object> object, String name) throws IOException {
+        Object value = object.get(name);
+        if (!(value instanceof String text) || text.isBlank()) throw new IOException("模型工具调用缺少 " + name);
+        return text;
+    }
+
+    private String send(String body) throws IOException, InterruptedException {
+        var builder = requestBuilder();
+        var response = client.send(builder.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
+                HttpResponse.BodyHandlers.ofInputStream());
+        byte[] bytes;
+        try (var stream = response.body()) { bytes = stream.readNBytes(MAX_RESPONSE_BYTES + 1); }
+        if (bytes.length > MAX_RESPONSE_BYTES) throw new IOException("模型响应超过 2 MiB 限制");
+        if (response.statusCode() < 200 || response.statusCode() >= 300)
+            throw new IOException("模型服务返回 HTTP " + response.statusCode());
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private HttpRequest.Builder requestBuilder() {
+        var builder = HttpRequest.newBuilder(config.endpoint()).timeout(config.timeout())
+                .header("Content-Type", "application/json; charset=utf-8")
+                .header("Accept", "application/json");
+        if (!config.apiKey().isEmpty()) builder.header("Authorization", "Bearer " + config.apiKey());
+        return builder;
     }
 
     static String extractContent(String json) throws IOException {

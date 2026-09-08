@@ -27,6 +27,10 @@ public final class FunctionRegistry {
                 + "\n  ]\n}\n";
     }
 
+    public String toolsJson() {
+        return "[" + String.join(",", definitions().stream().map(FunctionDefinition::toJson).toList()) + "]";
+    }
+
     public FunctionCallResult call(String callId, String name, String input) {
         String stableId = callId == null || callId.isBlank() ? "call_" + UUID.randomUUID() : callId;
         RegisteredFunction registered = functions.get(name);

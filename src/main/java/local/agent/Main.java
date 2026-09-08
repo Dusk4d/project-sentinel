@@ -34,6 +34,7 @@ import local.agent.rag.LocalRagService;
 import local.agent.model.AiRagService;
 import local.agent.model.ModelConfig;
 import local.agent.model.OpenAiCompatibleClient;
+import local.agent.model.ToolCallingAgentService;
 
 public final class Main {
     public static void main(String[] args) {
@@ -69,6 +70,10 @@ public final class Main {
         }
         if (args.length == 3 && args[0].equals("--ask-ai")) {
             runAiRag(Path.of(args[1]), args[2]);
+            return;
+        }
+        if (args.length == 3 && args[0].equals("--agent-ai")) {
+            runToolCallingAgent(Path.of(args[1]), args[2]);
             return;
         }
         if (args.length >= 2 && args[0].equals("--check")) {
@@ -471,5 +476,14 @@ public final class Main {
             System.out.print(new AiRagService(rag, model).ask(question).renderText());
         } catch (IllegalArgumentException e) { System.err.println("模型配置错误: " + e.getMessage()); System.exit(2); }
         catch (Exception e) { System.err.println("模型增强 RAG 失败: " + e.getMessage()); System.exit(1); }
+    }
+
+    private static void runToolCallingAgent(Path workspace, String task) {
+        try {
+            var agent = new WorkspaceAgent(workspace);
+            var model = new OpenAiCompatibleClient(ModelConfig.fromEnvironment());
+            System.out.print(new ToolCallingAgentService(agent, model).run(task).renderText());
+        } catch (IllegalArgumentException e) { System.err.println("Agent 参数或模型配置错误: " + e.getMessage()); System.exit(2); }
+        catch (Exception e) { System.err.println("Function Calling Agent 失败: " + e.getMessage()); System.exit(1); }
     }
 }

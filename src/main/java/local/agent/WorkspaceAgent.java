@@ -31,6 +31,7 @@ public final class WorkspaceAgent {
     }
 
     public String toolDefinitionsJson() { return functions.definitionsJson(); }
+    public String toolsJson() { return functions.toolsJson(); }
 
     public FunctionCallResult callFunction(String callId, String name, String input) {
         return functions.call(callId, name, input);
