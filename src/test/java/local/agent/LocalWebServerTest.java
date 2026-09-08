@@ -32,11 +32,13 @@ final class LocalWebServerTest {
             assertTrue(page.body().contains("上传 ZIP 检测"));
             assertTrue(page.body().contains("id=\"download\" disabled>下载 JSON"));
             assertTrue(page.body().contains("-sentinel-analysis.json"));
-            assertTrue(page.body().contains("项目问答（RAG）"));
+            assertTrue(page.body().contains("项目智能助手"));
             assertTrue(page.body().contains("id=\"question\""));
             assertTrue(page.body().contains("'/api/rag'"));
             assertTrue(page.body().contains("id=\"ai\" type=\"checkbox\" disabled"));
             assertTrue(page.body().contains("'/api/rag-ai'"));
+            assertTrue(page.body().contains("id=\"agent\" disabled>Agent 分析"));
+            assertTrue(page.body().contains("/api/agent-ai"));
 
             var health = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/health")).GET().build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));

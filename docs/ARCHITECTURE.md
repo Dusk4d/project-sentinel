@@ -45,6 +45,8 @@ ZIP 上传使用独立的 `ZipProjectUpload` 边界：请求体、条目数、�
 
 当进程环境提供完整模型配置时，Web 额外启用 `/api/rag-ai`。能力状态只以布尔值暴露；请求仍先通过项目白名单、本地检索和扫描准入，再进入 `AiRagService`。普通 `/api/rag` 始终保留，确保模型不是健康检查和问答的强依赖。
 
+`/api/agent-ai` 将 Web 任务交给与 CLI 相同的 `ToolCallingAgentService` 和 `WorkspaceAgent`。浏览器只提交任务与已签发项目 ID，不能指定工具实现或文件系统根；整个工具循环占用共享准入许可，并返回版本化回答及轮次、调用次数。
+
 `AtomicTextStore` 统一稳定输出文件的写入语义。每日运行只替换 Agent 状态目录内的 `latest.html` 和 `latest.json`，时间戳 Markdown 与 TSV 历史仅追加，不执行自动清理。
 
 `SnapshotStore` 把 TSV 当作有严格契约的单项目时序，读取和追加前都校验表头、取值范围、项目一致性与时间单调性。只有全部校验通过后才会原子替换历史文件。

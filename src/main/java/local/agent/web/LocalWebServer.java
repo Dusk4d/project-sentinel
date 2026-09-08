@@ -13,6 +13,8 @@ import local.agent.rag.LocalRagService;
 import local.agent.model.AiRagService;
 import local.agent.model.ModelConfig;
 import local.agent.model.OpenAiCompatibleClient;
+import local.agent.model.ToolCallingAgentService;
+import local.agent.WorkspaceAgent;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -67,6 +69,7 @@ public final class LocalWebServer implements AutoCloseable {
         createContext("/api/upload-analysis", this::uploadAnalysis);
         createContext("/api/rag", this::rag);
         createContext("/api/rag-ai", this::ragAi);
+        createContext("/api/agent-ai", this::agentAi);
         createContext("/api/report", this::report);
         createContext("/", this::page);
     }
@@ -240,6 +243,43 @@ public final class LocalWebServer implements AutoCloseable {
         }
     }
 
+    private void agentAi(HttpExchange exchange) throws IOException {
+        if (!exactPath(exchange, "/api/agent-ai")) { notFound(exchange); return; }
+        if (!method(exchange, "POST")) return;
+        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (contentType == null || !contentType.toLowerCase(java.util.Locale.ROOT).startsWith("text/plain")) {
+            send(exchange, 415, "application/json; charset=utf-8", "{\"error\":\"Content-Type must be text/plain\"}\n");
+            return;
+        }
+        if (modelConfig == null) {
+            send(exchange, 503, "application/json; charset=utf-8", "{\"error\":\"function calling model is not configured\"}\n");
+            return;
+        }
+        Path project = selectedProject(exchange);
+        if (project == null) {
+            send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
+            return;
+        }
+        var lease = scanGate.tryAcquire();
+        if (lease == null) { busy(exchange); return; }
+        try (lease) {
+            String task = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
+            var agent = new ToolCallingAgentService(new WorkspaceAgent(project), new OpenAiCompatibleClient(modelConfig));
+            send(exchange, 200, "application/json; charset=utf-8", agent.run(task).toJson());
+        } catch (RequestTooLargeException tooLarge) {
+            send(exchange, 413, "application/json; charset=utf-8", "{\"error\":\"task exceeds 8 KiB limit\"}\n");
+        } catch (IllegalArgumentException invalid) {
+            send(exchange, 400, "application/json; charset=utf-8",
+                    "{\"error\":" + JsonReportWriter.quote(invalid.getMessage()) + "}\n");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            send(exchange, 503, "application/json; charset=utf-8", "{\"error\":\"agent request interrupted\"}\n");
+        } catch (Exception e) {
+            send(exchange, 502, "application/json; charset=utf-8",
+                    "{\"error\":" + JsonReportWriter.quote(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "}\n");
+        }
+    }
+
     private String readTextBody(HttpExchange exchange, int maximumBytes) throws IOException {
         long declared = parseContentLength(exchange.getRequestHeaders().getFirst("Content-Length"));
         if (declared > maximumBytes) throw new RequestTooLargeException();
@@ -359,5 +399,15 @@ public final class LocalWebServer implements AutoCloseable {
             async function init(){try{const r=await fetch('/api/projects');const d=await r.json();$('catalog').textContent=d.truncated?'项目超过 '+d.maximumProjects+' 个，仅显示前 '+d.maximumProjects+' 个；请缩小启动工作区。':'';$('ai').disabled=!d.modelEnabled;$('model-state').textContent=d.modelEnabled?'（已配置，勾选后启用）':'（未配置模型，使用本地抽取式回答）';$('projects').replaceChildren(...d.projects.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;return o}));$('projects').addEventListener('change',scan);await scan()}catch(e){$('project').textContent='后端连接失败';$('findings').textContent=e.message}}
             $('scan').addEventListener('click',scan);$('ask').addEventListener('click',ask);$('question').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});$('upload').addEventListener('click',()=>$('zip').click());$('zip').addEventListener('change',()=>{if($('zip').files[0])upload($('zip').files[0])});$('download').addEventListener('click',download);init();
             </script></body></html>
-            """;
+            """
+            .replace("<h2>项目问答（RAG）</h2>", "<h2>项目智能助手</h2>")
+            .replace("<button id=\"ask\">问项目</button>", "<button id=\"ask\">RAG 问答</button><button id=\"agent\" disabled>Agent 分析</button>")
+            .replace("答案会基于当前项目文件生成，并附带证据位置。", "RAG 返回带位置的检索证据；Agent 会自主调用只读工具并汇总结果。")
+            .replace("function download(){", """
+                    async function runAgent(){const q=$('question').value.trim();if(!q){$('rag-answer').textContent='请先输入任务。';return}const b=$('agent');b.disabled=true;b.textContent='Agent 执行中…';$('rag-answer').classList.remove('error');$('rag-answer').textContent='模型正在选择并调用只读项目工具…';$('rag-evidence').replaceChildren();try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/agent-ai?project='+id,{method:'POST',headers:{'Content-Type':'text/plain; charset=utf-8'},body:q});const data=await r.json();if(!r.ok)throw Error(data.error||'Agent 执行失败');$('rag-answer').textContent=data.answer+'\\n\\n模型轮次：'+data.modelRounds+'，工具调用：'+data.toolCalls}catch(e){$('rag-answer').textContent=e.message;$('rag-answer').classList.add('error')}finally{b.disabled=false;b.textContent='Agent 分析'}}
+                    function download(){""")
+            .replace("$('ai').disabled=!d.modelEnabled;", "$('ai').disabled=!d.modelEnabled;$('agent').disabled=!d.modelEnabled;")
+            .replace("（已配置，勾选后启用）", "（模型已配置，可使用增强 RAG 与 Agent）")
+            .replace("（未配置模型，使用本地抽取式回答）", "（未配置模型，使用本地 RAG）")
+            .replace("$('ask').addEventListener('click',ask);", "$('ask').addEventListener('click',ask);$('agent').addEventListener('click',runAgent);");
 }
