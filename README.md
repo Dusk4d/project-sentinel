@@ -2,6 +2,8 @@
 
 Project Sentinel 是一个基于 Java 21 的本地项目健康检查与行动规划 Agent，面向学生和个人开发者。现实问题是：项目散落在本机，README、测试、构建配置和 TODO 状态常常无人持续维护，直到交付或面试前才暴露风险。本工具在不上传源码的前提下扫描项目，给出带文件证据的风险分级和下一步行动建议。构件名和 Java 包暂时保留兼容名称 `workspace-agent`。
 
+源码计数覆盖 JVM、Python、Ruby、PHP、JavaScript/TypeScript、React JSX/TSX、Vue、Svelte、Go、Rust、C/C++、Objective-C、.NET、Swift、Dart、Lua、R、Shell 和 PowerShell 等常见扩展名；测试文件通过测试目录及 `test`/`spec` 命名识别。
+
 当前版本完全本地运行，不需要 API 密钥，也不会把代码发送给第三方。
 
 README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_CN.md` 等分隔变体。空文件和纯空白内容会单独报告；嵌套文件或 `READMEevil.md` 一类相似前缀不能制造“文档已完成”的假象。

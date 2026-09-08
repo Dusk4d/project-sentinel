@@ -65,6 +65,26 @@ final class ProjectAnalyzerTest {
         assertFalse(todo.evidence().contains("TODO implement"));
     }
 
+    @Test void recognizesModernFrontendAndAdditionalLanguageSourcesAndTests() throws Exception {
+        Files.writeString(root.resolve("package.json"), "{}");
+        Path source = Files.createDirectories(root.resolve("src/components"));
+        Files.writeString(source.resolve("App.tsx"), "export const App = () => null;");
+        Files.writeString(source.resolve("Widget.jsx"), "export default function Widget() {}");
+        Files.writeString(source.resolve("Page.vue"), "<template></template>");
+        Files.writeString(source.resolve("Panel.svelte"), "<main></main>");
+        Files.writeString(source.resolve("Tool.cs"), "class Tool {}");
+        Files.writeString(source.resolve("script.rb"), "puts 'ok'");
+        Path tests = Files.createDirectories(root.resolve("src/tests"));
+        Files.writeString(tests.resolve("App.test.tsx"), "test('app', () => {});");
+        Files.writeString(tests.resolve("ToolSpec.cs"), "class ToolSpec {}");
+
+        var profile = new ProjectAnalyzer().analyze(root);
+
+        assertEquals(6, profile.sourceFileCount());
+        assertEquals(2, profile.testFileCount());
+        assertFalse(profile.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.TESTS_MISSING)));
+    }
+
     @Test void reportsMissingAndPresentDependencyLock() throws Exception {
         Files.writeString(root.resolve("package.json"), "{}");
         var unlocked = new ProjectAnalyzer().analyze(root);

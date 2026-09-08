@@ -15,7 +15,11 @@ import java.util.regex.Pattern;
 import local.agent.config.AnalyzerConfig;
 
 public final class ProjectAnalyzer {
-    private static final Set<String> SOURCE_EXTENSIONS = Set.of(".java", ".kt", ".py", ".js", ".ts", ".go", ".rs", ".c", ".cpp");
+    private static final Set<String> SOURCE_EXTENSIONS = Set.of(
+            ".java", ".kt", ".kts", ".scala", ".groovy", ".clj",
+            ".py", ".rb", ".php", ".js", ".jsx", ".ts", ".tsx", ".vue", ".svelte",
+            ".go", ".rs", ".c", ".h", ".cpp", ".hpp", ".m", ".mm",
+            ".cs", ".fs", ".vb", ".swift", ".dart", ".lua", ".r", ".sh", ".ps1");
     private static final List<String> BUILD_MANIFEST_NAMES = List.of("pom.xml", "build.gradle", "build.gradle.kts",
             "package.json", "pyproject.toml", "Cargo.toml", "go.mod");
     private static final Pattern ACTION_MARKER = Pattern.compile("(?:^|\\s)(?://|#|/\\*|\\*)\\s*(TODO|FIXME|HACK)\\b", Pattern.CASE_INSENSITIVE);
