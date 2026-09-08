@@ -24,11 +24,17 @@ public final class LocalWebServer implements AutoCloseable {
     private final Path workspace;
     private final List<Path> projects;
     private final boolean projectsTruncated;
+    private final ScanAdmissionGate scanGate;
     private final HttpServer server;
     private final ExecutorService executor;
 
     public LocalWebServer(Path workspace, int port) throws IOException {
+        this(workspace, port, new ScanAdmissionGate());
+    }
+
+    LocalWebServer(Path workspace, int port, ScanAdmissionGate scanGate) throws IOException {
         if (port < 0 || port > 65_535) throw new IllegalArgumentException("端口必须在 0 到 65535 之间");
+        this.scanGate = java.util.Objects.requireNonNull(scanGate, "scanGate");
         this.workspace = workspace.toRealPath();
         if (!Files.isDirectory(this.workspace)) throw new IOException("工作区不是目录: " + this.workspace);
         ProjectDiscoveryResult discovery = new ProjectDiscovery().discoverBounded(this.workspace,
@@ -54,7 +60,8 @@ public final class LocalWebServer implements AutoCloseable {
         if (!method(exchange, "GET")) return;
         send(exchange, 200, "application/json; charset=utf-8",
                 "{\"status\":\"UP\",\"workspace\":" + JsonReportWriter.quote(workspace.toString())
-                        + ",\"projectCount\":" + projects.size() + ",\"projectsTruncated\":" + projectsTruncated + "}\n");
+                        + ",\"projectCount\":" + projects.size() + ",\"projectsTruncated\":" + projectsTruncated
+                        + ",\"scanBusy\":" + scanGate.busy() + "}\n");
     }
 
     private void projects(HttpExchange exchange) throws IOException {
@@ -77,7 +84,9 @@ public final class LocalWebServer implements AutoCloseable {
         if (!exactPath(exchange, "/api/report")) { notFound(exchange); return; }
         String method = exchange.getRequestMethod();
         if (!method.equals("GET") && !method.equals("POST")) { methodNotAllowed(exchange, "GET, POST"); return; }
-        try {
+        var lease = scanGate.tryAcquire();
+        if (lease == null) { busy(exchange); return; }
+        try (lease) {
             Path project = selectedProject(exchange);
             if (project == null) {
                 send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
@@ -95,7 +104,9 @@ public final class LocalWebServer implements AutoCloseable {
         if (!exactPath(exchange, "/api/analysis")) { notFound(exchange); return; }
         String method = exchange.getRequestMethod();
         if (!method.equals("GET") && !method.equals("POST")) { methodNotAllowed(exchange, "GET, POST"); return; }
-        try {
+        var lease = scanGate.tryAcquire();
+        if (lease == null) { busy(exchange); return; }
+        try (lease) {
             Path project = selectedProject(exchange);
             if (project == null) {
                 send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
@@ -148,6 +159,11 @@ public final class LocalWebServer implements AutoCloseable {
 
     private void notFound(HttpExchange exchange) throws IOException {
         send(exchange, 404, "application/json; charset=utf-8", "{\"error\":\"not found\"}\n");
+    }
+
+    private void busy(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().set("Retry-After", "1");
+        send(exchange, 429, "application/json; charset=utf-8", "{\"error\":\"scan already in progress\"}\n");
     }
 
     private void send(HttpExchange exchange, int status, String contentType, String body) throws IOException {

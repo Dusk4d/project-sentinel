@@ -36,6 +36,7 @@ final class LocalWebServerTest {
             assertTrue(health.body().contains("\"status\":\"UP\""));
             assertTrue(health.body().contains("\"projectCount\":1"));
             assertTrue(health.body().contains("\"projectsTruncated\":false"));
+            assertTrue(health.body().contains("\"scanBusy\":false"));
 
             var report = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/report"))
                             .POST(HttpRequest.BodyPublishers.noBody()).build(),

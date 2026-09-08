@@ -31,6 +31,8 @@ CLI 在整个日检编排期间持有 `StateRunLock`，锁粒度是规范化后�
 
 `AnalysisBundleJsonWriter` 将同一个不可变 `ProjectProfile` 分别交给健康报告和行动计划 writer，再嵌入组合 schema。Web 页面因此无需重复扫描，也不会出现报告分数与行动队列跨时刻分叉。
 
+`ScanAdmissionGate` 为 Web 报告与组合分析共享单个公平许可。并发扫描不会排队占用虚拟线程和重复冲击磁盘，而是返回带重试提示的 429；轻量健康检查和项目目录不经过该许可。
+
 `AtomicTextStore` 统一稳定输出文件的写入语义。每日运行只替换 Agent 状态目录内的 `latest.html` 和 `latest.json`，时间戳 Markdown 与 TSV 历史仅追加，不执行自动清理。
 
 `SnapshotStore` 把 TSV 当作有严格契约的单项目时序，读取和追加前都校验表头、取值范围、项目一致性与时间单调性。只有全部校验通过后才会原子替换历史文件。
