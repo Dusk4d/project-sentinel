@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import local.agent.analysis.ProjectAnalyzer;
 import local.agent.analysis.ProjectDiscovery;
 import local.agent.report.JsonReportWriter;
+import local.agent.report.AnalysisBundleJsonWriter;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -34,6 +35,7 @@ public final class LocalWebServer implements AutoCloseable {
         server.setExecutor(executor);
         server.createContext("/api/health", this::health);
         server.createContext("/api/projects", this::projects);
+        server.createContext("/api/analysis", this::analysis);
         server.createContext("/api/report", this::report);
         server.createContext("/", this::page);
     }
@@ -75,6 +77,24 @@ public final class LocalWebServer implements AutoCloseable {
                 return;
             }
             String json = new JsonReportWriter().render(new ProjectAnalyzer().analyze(project));
+            send(exchange, 200, "application/json; charset=utf-8", json);
+        } catch (Exception e) {
+            send(exchange, 500, "application/json; charset=utf-8",
+                    "{\"error\":" + JsonReportWriter.quote(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "}\n");
+        }
+    }
+
+    private void analysis(HttpExchange exchange) throws IOException {
+        if (!exactPath(exchange, "/api/analysis")) { notFound(exchange); return; }
+        String method = exchange.getRequestMethod();
+        if (!method.equals("GET") && !method.equals("POST")) { methodNotAllowed(exchange, "GET, POST"); return; }
+        try {
+            Path project = selectedProject(exchange);
+            if (project == null) {
+                send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
+                return;
+            }
+            String json = new AnalysisBundleJsonWriter().render(new ProjectAnalyzer().analyze(project));
             send(exchange, 200, "application/json; charset=utf-8", json);
         } catch (Exception e) {
             send(exchange, 500, "application/json; charset=utf-8",
@@ -143,8 +163,8 @@ public final class LocalWebServer implements AutoCloseable {
             <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
             <title>Project Sentinel</title><style>
             :root{color-scheme:light;font-family:Inter,"Microsoft YaHei",sans-serif;background:#f4f7fb;color:#172033}body{margin:0}.wrap{max-width:1050px;margin:auto;padding:32px 20px}header{display:flex;justify-content:space-between;align-items:center;gap:16px}h1{margin:0;font-size:28px}.controls{display:flex;gap:10px}button,select{border:1px solid #cbd5e1;border-radius:10px;padding:11px 14px;font-weight:700;background:white}button{border:0;background:#2457d6;color:white;cursor:pointer}button:disabled{opacity:.55}.grid{display:grid;grid-template-columns:220px 1fr;gap:18px;margin-top:24px}.card{background:white;border:1px solid #dce4f0;border-radius:16px;padding:20px;box-shadow:0 8px 24px #1b31500d}.score{font-size:64px;font-weight:800;color:#176b45}.muted{color:#667085}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:#f6f8fc;border-radius:10px;padding:12px}.finding{border-top:1px solid #e7ebf2;padding:14px 0}.finding:first-child{border:0}.sev{font-size:12px;font-weight:800;padding:3px 8px;border-radius:99px;background:#eef2ff}.error{color:#b42318}@media(max-width:700px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}header{align-items:flex-start;flex-direction:column}.controls{width:100%}select{min-width:0;flex:1}}
-            </style></head><body><main class="wrap"><header><div><h1>Project Sentinel</h1><div id="project" class="muted">正在连接本地后端…</div></div><div class="controls"><select id="projects" aria-label="选择项目"></select><button id="scan">重新扫描</button></div></header><section class="grid"><div class="card"><div class="muted">健康分</div><div id="score" class="score">--</div><div id="ecosystem" class="muted"></div></div><div class="card"><div class="metrics"><div class="metric">文件<br><strong id="files">--</strong></div><div class="metric">源码<br><strong id="sources">--</strong></div><div class="metric">测试<br><strong id="tests">--</strong></div><div class="metric">待办<br><strong id="todos">--</strong></div></div><h2>发现与建议</h2><div id="findings"></div></div></section></main><script>
-            const $=id=>document.getElementById(id);async function scan(){const b=$('scan');b.disabled=true;b.textContent='扫描中…';try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/report?project='+id,{method:'POST'});const d=await r.json();if(!r.ok)throw Error(d.error||'扫描失败');$('project').textContent=d.root;$('score').textContent=d.healthScore;$('ecosystem').textContent=d.ecosystem;for(const k of ['files','sources','tests','todos'])$(k).textContent=d.metrics[k];$('findings').replaceChildren(...d.findings.map(f=>{const x=document.createElement('div');x.className='finding';const h=document.createElement('div');const s=document.createElement('span');s.className='sev';s.textContent=f.severity;h.append(s,' '+f.category+' · '+f.message);const e=document.createElement('div');e.className='muted';e.textContent='证据：'+f.evidence;const a=document.createElement('div');a.textContent='建议：'+f.action;x.append(h,e,a);return x}))}catch(e){$('findings').innerHTML='<div class="error"></div>';$('findings').firstChild.textContent=e.message}finally{b.disabled=false;b.textContent='重新扫描'}}async function init(){try{const r=await fetch('/api/projects');const d=await r.json();$('projects').replaceChildren(...d.projects.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;return o}));$('projects').addEventListener('change',scan);await scan()}catch(e){$('project').textContent='后端连接失败';$('findings').textContent=e.message}}$('scan').addEventListener('click',scan);init();
+            </style></head><body><main class="wrap"><header><div><h1>Project Sentinel</h1><div id="project" class="muted">正在连接本地后端…</div></div><div class="controls"><select id="projects" aria-label="选择项目"></select><button id="scan">重新扫描</button></div></header><section class="grid"><div class="card"><div class="muted">健康分</div><div id="score" class="score">--</div><div id="ecosystem" class="muted"></div><div id="projection" class="muted"></div></div><div class="card"><div class="metrics"><div class="metric">文件<br><strong id="files">--</strong></div><div class="metric">源码<br><strong id="sources">--</strong></div><div class="metric">测试<br><strong id="tests">--</strong></div><div class="metric">待办<br><strong id="todos">--</strong></div></div><h2>优先行动</h2><div id="actions"></div><h2>全部发现</h2><div id="findings"></div></div></section></main><script>
+            const $=id=>document.getElementById(id);async function scan(){const b=$('scan');b.disabled=true;b.textContent='扫描中…';try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/analysis?project='+id,{method:'POST'});const bundle=await r.json();if(!r.ok)throw Error(bundle.error||'扫描失败');const d=bundle.report,p=bundle.plan;$('project').textContent=d.root;$('score').textContent=d.healthScore;$('ecosystem').textContent=d.ecosystem;$('projection').textContent=p.actionCount?'完成行动后理论预计 '+p.projectedHealthScore+' 分（可恢复 '+p.potentialScoreRecovery+'）':'当前没有需处理的行动';for(const k of ['files','sources','tests','todos'])$(k).textContent=d.metrics[k];$('actions').replaceChildren(...p.actions.map(a=>{const x=document.createElement('div');x.className='finding';const h=document.createElement('strong');h.textContent=a.rank+'. '+a.action;const e=document.createElement('div');e.className='muted';e.textContent=a.severity+' · '+a.category+' · 预计恢复 '+a.potentialScoreGain+' 分';const why=document.createElement('div');why.textContent=a.rationale;x.append(h,e,why);return x}));$('findings').replaceChildren(...d.findings.map(f=>{const x=document.createElement('div');x.className='finding';const h=document.createElement('div');const s=document.createElement('span');s.className='sev';s.textContent=f.severity;h.append(s,' '+f.category+' · '+f.message);const e=document.createElement('div');e.className='muted';e.textContent='证据：'+f.evidence;const a=document.createElement('div');a.textContent='建议：'+f.action;x.append(h,e,a);return x}))}catch(e){$('actions').replaceChildren();$('findings').innerHTML='<div class="error"></div>';$('findings').firstChild.textContent=e.message}finally{b.disabled=false;b.textContent='重新扫描'}}async function init(){try{const r=await fetch('/api/projects');const d=await r.json();$('projects').replaceChildren(...d.projects.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;return o}));$('projects').addEventListener('change',scan);await scan()}catch(e){$('project').textContent='后端连接失败';$('findings').textContent=e.message}}$('scan').addEventListener('click',scan);init();
             </script></body></html>
             """;
 }

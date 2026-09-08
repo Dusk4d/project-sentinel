@@ -42,6 +42,13 @@ final class LocalWebServerTest {
             assertEquals(200, report.statusCode());
             assertTrue(report.body().contains("\"schemaVersion\": 1"));
             assertTrue(report.body().contains("\"project\": \"" + project.getFileName() + "\""));
+
+            var analysis = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/analysis"))
+                            .POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, analysis.statusCode());
+            assertTrue(analysis.body().contains("\"report\": {"));
+            assertTrue(analysis.body().contains("\"plan\": {"));
         }
     }
 
