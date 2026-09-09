@@ -50,6 +50,11 @@ final class LocalWebServerTest {
             assertTrue(health.body().contains("\"modelEnabled\":false"));
             assertTrue(health.body().contains("\"agentMemoryEnabled\":false"));
 
+            var agentState = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/agent-state")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, agentState.statusCode());
+            assertEquals("{\"enabled\":false,\"memoryEntries\":0,\"checkpoint\":\"NONE\"}\n", agentState.body());
+
             var report = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/report"))
                             .POST(HttpRequest.BodyPublishers.noBody()).build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));

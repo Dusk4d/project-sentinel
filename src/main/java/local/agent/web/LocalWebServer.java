@@ -89,6 +89,7 @@ public final class LocalWebServer implements AutoCloseable {
         createContext("/api/rag", this::rag);
         createContext("/api/rag-ai", this::ragAi);
         createContext("/api/agent-ai", this::agentAi);
+        createContext("/api/agent-state", this::agentState);
         createContext("/api/report", this::report);
         createContext("/", this::page);
     }
@@ -352,6 +353,33 @@ public final class LocalWebServer implements AutoCloseable {
         }
     }
 
+    private void agentState(HttpExchange exchange) throws IOException {
+        if (!exactPath(exchange, "/api/agent-state")) { notFound(exchange); return; }
+        if (!method(exchange, "GET")) return;
+        Path project = selectedProject(exchange);
+        if (project == null) {
+            send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
+            return;
+        }
+        if (agentStateDirectory == null) {
+            send(exchange, 200, "application/json; charset=utf-8",
+                    "{\"enabled\":false,\"memoryEntries\":0,\"checkpoint\":\"NONE\"}\n");
+            return;
+        }
+        try {
+            Path state = agentStateDirectory.resolve(projectId(project));
+            int entries = new AgentMemoryStore(project, state).readRecent(100).size();
+            var checkpoint = AgentCheckpointStore.inspect(state);
+            String status = !checkpoint.present() ? "NONE" : checkpoint.completed() ? "COMPLETED"
+                    : checkpoint.ready() ? "READY" : "ACTIVE";
+            send(exchange, 200, "application/json; charset=utf-8", "{\"enabled\":true,\"memoryEntries\":"
+                    + entries + ",\"checkpoint\":" + JsonReportWriter.quote(status) + "}\n");
+        } catch (Exception e) {
+            send(exchange, 500, "application/json; charset=utf-8",
+                    "{\"error\":" + JsonReportWriter.quote(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "}\n");
+        }
+    }
+
     private String readTextBody(HttpExchange exchange, int maximumBytes) throws IOException {
         long declared = parseContentLength(exchange.getRequestHeaders().getFirst("Content-Length"));
         if (declared > maximumBytes) throw new RequestTooLargeException();
@@ -451,7 +479,7 @@ public final class LocalWebServer implements AutoCloseable {
             <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
             <title>Project Sentinel</title><style>
             :root{color-scheme:light;font-family:Inter,"Microsoft YaHei",sans-serif;background:#f4f7fb;color:#172033}body{margin:0}.wrap{max-width:1050px;margin:auto;padding:32px 20px}header{display:flex;justify-content:space-between;align-items:center;gap:16px}h1{margin:0;font-size:28px}.controls{display:flex;flex-wrap:wrap;gap:10px}button,select,input{border:1px solid #cbd5e1;border-radius:10px;padding:11px 14px;font-weight:700;background:white}button{border:0;background:#2457d6;color:white;cursor:pointer}button:disabled{opacity:.55}.grid{display:grid;grid-template-columns:220px 1fr;gap:18px;margin-top:24px}.card{background:white;border:1px solid #dce4f0;border-radius:16px;padding:20px;box-shadow:0 8px 24px #1b31500d}.score{font-size:64px;font-weight:800;color:#176b45}.muted{color:#667085}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{background:#f6f8fc;border-radius:10px;padding:12px}.finding,.evidence{border-top:1px solid #e7ebf2;padding:14px 0}.finding:first-child,.evidence:first-child{border:0}.sev{font-size:12px;font-weight:800;padding:3px 8px;border-radius:99px;background:#eef2ff}.error{color:#b42318}.ask{display:flex;gap:10px}.ask input{min-width:0;flex:1}.answer{white-space:pre-wrap;line-height:1.65}@media(max-width:700px){.grid{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}header{align-items:flex-start;flex-direction:column}.controls{width:100%}select{min-width:0;flex:1}.ask{flex-direction:column}}
-            </style></head><body><main class="wrap"><header><div><h1>Project Sentinel</h1><div id="project" class="muted">正在连接本地后端…</div><div id="catalog" class="muted"></div></div><div class="controls"><select id="projects" aria-label="选择项目"></select><button id="scan">重新扫描</button><input id="zip" type="file" accept=".zip,application/zip" hidden><button id="upload">上传 ZIP 检测</button><button id="download" disabled>下载 JSON</button></div></header><section class="grid"><div class="card"><div class="muted">健康分</div><div id="score" class="score">--</div><div id="ecosystem" class="muted"></div><div id="projection" class="muted"></div></div><div class="card"><div class="metrics"><div class="metric">文件<br><strong id="files">--</strong></div><div class="metric">源码<br><strong id="sources">--</strong></div><div class="metric">测试<br><strong id="tests">--</strong></div><div class="metric">待办<br><strong id="todos">--</strong></div></div><h2>项目问答（RAG）</h2><div class="ask"><input id="question" maxlength="8000" placeholder="例如：这个项目如何启动？" aria-label="项目问题"><button id="ask">问项目</button></div><label class="muted"><input id="ai" type="checkbox" disabled> 使用模型增强</label><span id="model-state" class="muted">（未配置模型）</span><div id="rag-answer" class="answer muted">答案会基于当前项目文件生成，并附带证据位置。</div><div id="rag-evidence"></div><h2>优先行动</h2><div id="actions"></div><h2>全部发现</h2><div id="findings"></div></div></section></main><script>
+            </style></head><body><main class="wrap"><header><div><h1>Project Sentinel</h1><div id="project" class="muted">正在连接本地后端…</div><div id="catalog" class="muted"></div></div><div class="controls"><select id="projects" aria-label="选择项目"></select><button id="scan">重新扫描</button><input id="zip" type="file" accept=".zip,application/zip" hidden><button id="upload">上传 ZIP 检测</button><button id="download" disabled>下载 JSON</button></div></header><section class="grid"><div class="card"><div class="muted">健康分</div><div id="score" class="score">--</div><div id="ecosystem" class="muted"></div><div id="projection" class="muted"></div></div><div class="card"><div class="metrics"><div class="metric">文件<br><strong id="files">--</strong></div><div class="metric">源码<br><strong id="sources">--</strong></div><div class="metric">测试<br><strong id="tests">--</strong></div><div class="metric">待办<br><strong id="todos">--</strong></div></div><h2>项目问答（RAG）</h2><div class="ask"><input id="question" maxlength="8000" placeholder="例如：这个项目如何启动？" aria-label="项目问题"><button id="ask">问项目</button></div><label class="muted"><input id="ai" type="checkbox" disabled> 使用模型增强</label><span id="model-state" class="muted">（未配置模型）</span><div id="agent-state" class="muted"></div><div id="rag-answer" class="answer muted">答案会基于当前项目文件生成，并附带证据位置。</div><div id="rag-evidence"></div><h2>优先行动</h2><div id="actions"></div><h2>全部发现</h2><div id="findings"></div></div></section></main><script>
             const $=id=>document.getElementById(id);
             let latest=null;
             function render(bundle){
@@ -482,6 +510,9 @@ public final class LocalWebServer implements AutoCloseable {
             .replace("（已配置，勾选后启用）", "（模型已配置，可使用增强 RAG 与 Agent）")
             .replace("（未配置模型，使用本地抽取式回答）", "（未配置模型，使用本地 RAG）")
             .replace("d.modelEnabled?'（模型已配置，可使用增强 RAG 与 Agent）'", "d.modelEnabled?'（模型已配置，可使用增强 RAG 与 Agent'+(d.agentMemoryEnabled?'，已启用持久记忆':'')+'）'")
+            .replace("function download(){", "async function refreshAgentState(){try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/agent-state?project='+id);const d=await r.json();if(!r.ok)throw Error(d.error||'状态读取失败');$('agent-state').textContent=d.enabled?'Agent 记忆 '+d.memoryEntries+' 条 · 检查点 '+d.checkpoint:'Agent 当前为无状态模式'}catch(e){$('agent-state').textContent='Agent 状态不可用：'+e.message}}\nfunction download(){")
+            .replace("$('projects').addEventListener('change',scan);await scan()", "$('projects').addEventListener('change',async()=>{await scan();await refreshAgentState()});await scan();await refreshAgentState()")
+            .replace("}))}catch(e){$('rag-answer').textContent=e.message", "}));await refreshAgentState()}catch(e){$('rag-answer').textContent=e.message")
             .replace("+'，工具调用：'+data.toolCalls}catch", "+'，工具调用：'+data.toolCalls;const trace=data.trace||[];$('rag-evidence').replaceChildren(...trace.map(item=>{const x=document.createElement('div');x.className='evidence';x.textContent=item.sequence+'. '+item.name+(item.success?' · 成功':' · 失败');return x}))}catch")
             .replace("$('ask').addEventListener('click',ask);", "$('ask').addEventListener('click',ask);$('agent').addEventListener('click',runAgent);");
 }

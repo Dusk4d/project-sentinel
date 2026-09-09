@@ -67,6 +67,8 @@ final class WebAgentTest {
             assertTrue(response.body().contains("id=\"agent\""));
             assertTrue(response.body().contains("/api/agent-ai"));
             assertTrue(response.body().contains("Agent 分析"));
+            assertTrue(response.body().contains("id=\"agent-state\""));
+            assertTrue(response.body().contains("/api/agent-state"));
         }
     }
 
@@ -89,6 +91,13 @@ final class WebAgentTest {
             var health = client.send(HttpRequest.newBuilder(URI.create(web.url() + "api/health")).GET().build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             assertTrue(health.body().contains("\"agentMemoryEnabled\":true"));
+            var stateResponse = client.send(HttpRequest.newBuilder(URI.create(web.url() + "api/agent-state")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, stateResponse.statusCode());
+            assertTrue(stateResponse.body().contains("\"enabled\":true"));
+            assertTrue(stateResponse.body().contains("\"memoryEntries\":1"));
+            assertTrue(stateResponse.body().contains("\"checkpoint\":\"COMPLETED\""));
+            assertFalse(stateResponse.body().contains("检查项目"));
         } finally { model.stop(0); }
     }
 
