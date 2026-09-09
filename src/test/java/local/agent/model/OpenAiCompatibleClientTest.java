@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -57,6 +58,56 @@ final class OpenAiCompatibleClientTest {
                     () -> client.complete("system", "中".repeat(OpenAiCompatibleClient.MAX_REQUEST_BYTES)));
             assertTrue(failure.getMessage().contains("1 MiB"));
             assertFalse(contacted.get());
+        } finally { server.stop(0); }
+    }
+
+    @Test void includesBoundedStructuredModelErrorDetail() throws Exception {
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            byte[] response = "{\"error\":{\"message\":\"tool message requires tool_call_id\"}}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(400, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var config = new ModelConfig(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"),
+                    "test", "", Duration.ofSeconds(3));
+            var failure = assertThrows(java.io.IOException.class,
+                    () -> new OpenAiCompatibleClient(config).complete("system", "question"));
+            assertEquals("模型服务返回 HTTP 400：tool message requires tool_call_id", failure.getMessage());
+        } finally { server.stop(0); }
+    }
+
+    @Test void removesResponseOnlyToolCallIndexBeforeNextModelRound() throws Exception {
+        var requestBody = new AtomicReference<String>();
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = ("{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,"
+                    + "\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\","
+                    + "\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"input\\\":\\\"README.md\\\"}\"}}]}}]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var config = new ModelConfig(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"),
+                    "test", "", Duration.ofSeconds(3));
+            var turn = new OpenAiCompatibleClient(config).completeTurn("system",
+                    List.of("{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"index\":0.0,"
+                            + "\"id\":\"old\",\"type\":\"function\",\"function\":{\"name\":\"read\","
+                            + "\"arguments\":\"{\\\"input\\\":\\\"README.md\\\"}\"}}]}",
+                            "{\"role\":\"tool\",\"tool_call_id\":\"old\",\"content\":\"text\"}"), "[]");
+            assertEquals(1, turn.toolCalls().size());
+            assertFalse(requestBody.get().contains("\"index\""));
+            assertFalse(turn.assistantMessageJson().contains("\"index\""));
+            assertTrue(turn.assistantMessageJson().contains("\"id\":\"call_1\""));
+            assertTrue(turn.assistantMessageJson().contains("\"type\":\"function\""));
         } finally { server.stop(0); }
     }
 }

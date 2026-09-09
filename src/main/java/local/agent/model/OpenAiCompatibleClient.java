@@ -44,7 +44,7 @@ public final class OpenAiCompatibleClient {
         if (bytes.length > MAX_RESPONSE_BYTES) throw new IOException("模型响应超过 2 MiB 限制");
         String json = new String(bytes, StandardCharsets.UTF_8);
         if (response.statusCode() < 200 || response.statusCode() >= 300)
-            throw new IOException("模型服务返回 HTTP " + response.statusCode());
+            throw modelError(response.statusCode(), json);
         String content = extractContent(json);
         if (content.isBlank()) throw new IOException("模型响应缺少 choices[0].message.content");
         return content.strip();
@@ -53,7 +53,8 @@ public final class OpenAiCompatibleClient {
     ModelTurn completeTurn(String system, List<String> messageJson, String toolsJson) throws IOException, InterruptedException {
         String body = "{\"model\":" + JsonReportWriter.quote(config.model()) + ",\"temperature\":0.1,\"messages\":["
                 + "{\"role\":\"system\",\"content\":" + JsonReportWriter.quote(system) + "},"
-                + String.join(",", messageJson) + "],\"tools\":" + toolsJson + ",\"tool_choice\":\"auto\"}";
+                + String.join(",", normalizeOutgoingMessages(messageJson))
+                + "],\"tools\":" + toolsJson + ",\"tool_choice\":\"auto\"}";
         String response = send(body);
         Map<String, Object> root = JsonCodec.object(JsonCodec.parse(response), "响应根值");
         Object choicesValue = root.get("choices");
@@ -62,6 +63,7 @@ public final class OpenAiCompatibleClient {
         Map<String, Object> message = JsonCodec.object(choice.get("message"), "choices[0].message");
         String content = message.get("content") instanceof String value ? value.strip() : "";
         var calls = new ArrayList<ModelToolCall>();
+        var normalizedCalls = new ArrayList<Map<String, Object>>();
         Object callsValue = message.get("tool_calls");
         if (callsValue instanceof List<?> list) {
             if (list.size() > 8) throw new IOException("单轮模型工具调用超过 8 个限制");
@@ -73,13 +75,42 @@ public final class OpenAiCompatibleClient {
                 String arguments = requiredString(function, "arguments");
                 if (arguments.length() > 16 * 1024) throw new IOException("工具参数超过 16 KiB 限制");
                 calls.add(new ModelToolCall(id, name, arguments));
+                var normalizedFunction = new LinkedHashMap<String, Object>();
+                normalizedFunction.put("name", name);
+                normalizedFunction.put("arguments", arguments);
+                var normalizedCall = new LinkedHashMap<String, Object>();
+                normalizedCall.put("id", id);
+                normalizedCall.put("type", "function");
+                normalizedCall.put("function", normalizedFunction);
+                normalizedCalls.add(normalizedCall);
             }
         }
         var normalized = new LinkedHashMap<String, Object>();
         normalized.put("role", "assistant");
         if (message.containsKey("content")) normalized.put("content", message.get("content"));
-        if (message.containsKey("tool_calls")) normalized.put("tool_calls", message.get("tool_calls"));
+        if (!normalizedCalls.isEmpty()) normalized.put("tool_calls", normalizedCalls);
         return new ModelTurn(content, List.copyOf(calls), JsonCodec.write(normalized));
+    }
+
+    private static List<String> normalizeOutgoingMessages(List<String> messages) throws IOException {
+        var normalized = new ArrayList<String>(messages.size());
+        for (String json : messages) {
+            Map<String, Object> message = JsonCodec.object(JsonCodec.parse(json), "模型消息");
+            if (!"assistant".equals(message.get("role")) || !(message.get("tool_calls") instanceof List<?> calls)) {
+                normalized.add(json);
+                continue;
+            }
+            var cleanCalls = new ArrayList<Map<String, Object>>(calls.size());
+            for (Object value : calls) {
+                var clean = new LinkedHashMap<>(JsonCodec.object(value, "assistant.tool_calls[]"));
+                clean.remove("index");
+                cleanCalls.add(clean);
+            }
+            var cleanMessage = new LinkedHashMap<>(message);
+            cleanMessage.put("tool_calls", cleanCalls);
+            normalized.add(JsonCodec.write(cleanMessage));
+        }
+        return normalized;
     }
 
     private static String requiredString(Map<String, Object> object, String name) throws IOException {
@@ -96,9 +127,23 @@ public final class OpenAiCompatibleClient {
         byte[] bytes;
         try (var stream = response.body()) { bytes = stream.readNBytes(MAX_RESPONSE_BYTES + 1); }
         if (bytes.length > MAX_RESPONSE_BYTES) throw new IOException("模型响应超过 2 MiB 限制");
+        String json = new String(bytes, StandardCharsets.UTF_8);
         if (response.statusCode() < 200 || response.statusCode() >= 300)
-            throw new IOException("模型服务返回 HTTP " + response.statusCode());
-        return new String(bytes, StandardCharsets.UTF_8);
+            throw modelError(response.statusCode(), json);
+        return json;
+    }
+
+    private static IOException modelError(int status, String response) {
+        String detail = "";
+        try {
+            Map<String, Object> root = JsonCodec.object(JsonCodec.parse(response), "模型错误响应");
+            Object error = root.get("error");
+            if (error instanceof String text) detail = text;
+            else if (error instanceof Map<?, ?> object && object.get("message") instanceof String text) detail = text;
+        } catch (Exception ignored) { }
+        detail = detail.replaceAll("[\\p{Cntrl}\\s]+", " ").strip();
+        if (detail.length() > 300) detail = detail.substring(0, 300) + "…";
+        return new IOException("模型服务返回 HTTP " + status + (detail.isEmpty() ? "" : "：" + detail));
     }
 
     private static void requireBoundedRequest(String body) throws IOException {
