@@ -29,6 +29,7 @@ public final class LocalRagService {
     private static final Set<String> TEXT_NAMES = Set.of("readme", "license", "dockerfile", "makefile", "pom.xml", "build.gradle", "settings.gradle", "package.json", "pyproject.toml", "cargo.toml", "go.mod");
     private static final Set<String> TEXT_EXTENSIONS = Set.of(".md", ".txt", ".adoc", ".rst", ".java", ".kt", ".py", ".js", ".jsx", ".ts", ".tsx", ".vue", ".svelte", ".go", ".rs", ".c", ".cpp", ".h", ".cs", ".rb", ".php", ".xml", ".json", ".yml", ".yaml", ".toml", ".properties", ".gradle", ".sh", ".ps1");
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[\\p{IsHan}]+|[\\p{L}\\p{N}_]+", Pattern.UNICODE_CHARACTER_CLASS);
+    private static final Set<String> QUERY_STOP_TERMS = Set.of("这", "个", "的", "了", "吗", "呢", "是", "什", "么", "哪些", "什么", "这个", "一下", "请问", "tell", "me", "the", "a", "an", "of", "is", "what");
     private final WorkspaceGuard guard;
 
     public LocalRagService(WorkspaceGuard guard) { this.guard = guard; }
@@ -37,7 +38,8 @@ public final class LocalRagService {
         String query = question == null ? "" : question.strip();
         if (query.isEmpty()) throw new IllegalArgumentException("RAG 问题不能为空");
         List<Chunk> chunks = index();
-        List<String> queryTerms = tokens(query).stream().distinct().toList();
+        QueryIntent intent = QueryIntent.classify(query);
+        List<String> queryTerms = queryTerms(query, intent);
         if (queryTerms.isEmpty() || chunks.isEmpty()) return noEvidence(query);
 
         Map<String, Integer> documentFrequency = new HashMap<>();
@@ -45,22 +47,30 @@ public final class LocalRagService {
             for (String term : new HashSet<>(chunk.terms())) documentFrequency.merge(term, 1, Integer::sum);
         }
         double averageLength = chunks.stream().mapToInt(chunk -> chunk.terms().size()).average().orElse(1.0);
-        List<RagHit> hits = chunks.stream()
-                .map(chunk -> new ScoredChunk(chunk, score(chunk, queryTerms, documentFrequency, chunks.size(), averageLength)))
+        List<ScoredChunk> ranked = chunks.stream()
+                .map(chunk -> new ScoredChunk(chunk, score(chunk, queryTerms, documentFrequency,
+                        chunks.size(), averageLength, intent)))
                 .filter(scored -> scored.score() > 0.0)
                 .sorted(Comparator.comparingDouble(ScoredChunk::score).reversed()
                         .thenComparing(scored -> scored.chunk().path()).thenComparingInt(scored -> scored.chunk().startLine()))
-                .limit(5)
-                .map(scored -> new RagHit(scored.chunk().path(), scored.chunk().startLine(), scored.chunk().endLine(), scored.score(), scored.chunk().text()))
                 .toList();
+        List<RagHit> hits = diverseHits(ranked);
         if (hits.isEmpty()) return noEvidence(query);
-        String extract = hits.get(0).text().replaceAll("\\s+", " ").strip();
+        String extract = cleanExcerpt(hits.get(0).text());
         if (extract.length() > 360) extract = extract.substring(0, 357) + "...";
         return new RagAnswer(1, query, "最相关的本地证据是：" + extract + "（请结合下方来源核验。）", hits);
     }
 
     private RagAnswer noEvidence(String query) {
         return new RagAnswer(1, query, "没有找到足以支持回答的本地证据。", List.of());
+    }
+
+    private String cleanExcerpt(String text) {
+        return text.replaceAll("<[^>]+>", " ")
+                .replaceAll("\\[([^]]+)]\\([^)]*\\)", "$1")
+                .replaceAll("(?m)^\\s{0,3}#{1,6}\\s*", "")
+                .replaceAll("[`*_]", "")
+                .replaceAll("\\s+", " ").strip();
     }
 
     private List<Chunk> index() throws IOException {
@@ -107,7 +117,8 @@ public final class LocalRagService {
         } catch (IOException ignored) { }
     }
 
-    private double score(Chunk chunk, List<String> query, Map<String, Integer> df, int documents, double averageLength) {
+    private double score(Chunk chunk, List<String> query, Map<String, Integer> df, int documents,
+                         double averageLength, QueryIntent intent) {
         Map<String, Integer> frequency = new HashMap<>();
         for (String term : chunk.terms()) frequency.merge(term, 1, Integer::sum);
         double score = 0.0;
@@ -118,7 +129,29 @@ public final class LocalRagService {
             double idf = Math.log(1.0 + (documents - df.getOrDefault(term, 0) + 0.5) / (df.getOrDefault(term, 0) + 0.5));
             score += idf * tf * (k1 + 1.0) / (tf + k1 * (1.0 - b + b * chunk.terms().size() / averageLength));
         }
-        return score;
+        return intent.adjust(chunk, score);
+    }
+
+    private List<String> queryTerms(String query, QueryIntent intent) {
+        var terms = new ArrayList<>(tokens(query).stream().filter(term -> !QUERY_STOP_TERMS.contains(term)).toList());
+        terms.addAll(tokens(intent.expansion));
+        return terms.stream().distinct().toList();
+    }
+
+    private List<RagHit> diverseHits(List<ScoredChunk> ranked) {
+        var hits = new ArrayList<RagHit>();
+        var perPath = new HashMap<String, Integer>();
+        for (ScoredChunk scored : ranked) {
+            Chunk chunk = scored.chunk();
+            if (perPath.getOrDefault(chunk.path(), 0) >= 2) continue;
+            boolean overlaps = hits.stream().anyMatch(hit -> hit.path().equals(chunk.path())
+                    && hit.startLine() <= chunk.endLine() && chunk.startLine() <= hit.endLine());
+            if (overlaps) continue;
+            hits.add(new RagHit(chunk.path(), chunk.startLine(), chunk.endLine(), scored.score(), chunk.text()));
+            perPath.merge(chunk.path(), 1, Integer::sum);
+            if (hits.size() == 5) break;
+        }
+        return List.copyOf(hits);
     }
 
     static List<String> tokens(String text) {
@@ -137,6 +170,76 @@ public final class LocalRagService {
 
     private static boolean isHan(int codePoint) {
         return Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN;
+    }
+
+    private enum QueryIntent {
+        OVERVIEW("readme 简介 定位 目标 核心 功能 overview purpose"),
+        STARTUP("readme 启动 运行 安装 使用 start run install"),
+        ARCHITECTURE("architecture 架构 模块 组件 设计 分层"),
+        TECHNOLOGY("pom package pyproject build 技术 技术栈 依赖 framework"),
+        TESTING("test tests 测试 验证 coverage"),
+        GENERAL("");
+
+        private final String expansion;
+
+        QueryIntent(String expansion) { this.expansion = expansion; }
+
+        static QueryIntent classify(String question) {
+            String text = question.toLowerCase(Locale.ROOT);
+            if (containsAny(text, "主要功能", "核心功能", "项目是什么", "做什么", "项目介绍", "项目简介", "what is this project", "what does this project")) return OVERVIEW;
+            if (containsAny(text, "怎么启动", "如何启动", "怎么运行", "如何运行", "安装", "部署", "start", "run", "launch")) return STARTUP;
+            if (containsAny(text, "架构", "模块", "组件", "分层", "architecture", "module", "component")) return ARCHITECTURE;
+            if (containsAny(text, "技术栈", "框架", "依赖", "technology", "framework", "dependency")) return TECHNOLOGY;
+            if (containsAny(text, "测试", "覆盖率", "test", "coverage")) return TESTING;
+            return GENERAL;
+        }
+
+        double adjust(Chunk chunk, double lexical) {
+            String path = chunk.path().toLowerCase(Locale.ROOT);
+            String text = chunk.text().toLowerCase(Locale.ROOT);
+            double adjusted = lexical;
+            if (this == OVERVIEW) {
+                if (rootReadme(path)) adjusted += chunk.startLine() == 1 ? 30.0 : chunk.startLine() <= 80 ? 14.0 : 6.0;
+                else if (path.endsWith("vision.md")) adjusted += 9.0;
+                else if (path.endsWith("architecture.md")) adjusted += 5.0;
+                else if (isBuildManifest(path)) adjusted += 2.0;
+                if (text.contains("## 目录") || occurrences(text, "](#") >= 3) adjusted *= 0.35;
+                if (path.startsWith("interview-prep/") || path.startsWith("tmp/") || path.startsWith("reports/")) adjusted *= 0.2;
+            } else if (this == STARTUP) {
+                if (rootReadme(path)) adjusted += 7.0;
+                if (containsAny(path, "start", "run", "docker", "makefile") || containsAny(text, "启动", "运行", "start", "docker compose")) adjusted += 5.0;
+            } else if (this == ARCHITECTURE) {
+                if (path.endsWith("architecture.md")) adjusted += 10.0;
+                else if (rootReadme(path)) adjusted += 4.0;
+            } else if (this == TECHNOLOGY) {
+                if (isBuildManifest(path)) adjusted += 10.0;
+                else if (rootReadme(path)) adjusted += 4.0;
+            } else if (this == TESTING) {
+                if (path.contains("/test/") || path.startsWith("test/") || path.endsWith("test.java") || path.endsWith("_test.py")) adjusted += 5.0;
+            }
+            return adjusted;
+        }
+
+        private static boolean containsAny(String text, String... candidates) {
+            for (String candidate : candidates) if (text.contains(candidate)) return true;
+            return false;
+        }
+
+        private static int occurrences(String text, String needle) {
+            int count = 0;
+            for (int at = 0; (at = text.indexOf(needle, at)) >= 0; at += needle.length()) count++;
+            return count;
+        }
+
+        private static boolean rootReadme(String path) {
+            return !path.contains("/") && (path.equals("readme") || path.startsWith("readme."));
+        }
+
+        private static boolean isBuildManifest(String path) {
+            return !path.contains("/") && (path.equals("pom.xml") || path.equals("package.json")
+                    || path.equals("pyproject.toml") || path.equals("build.gradle") || path.equals("go.mod")
+                    || path.equals("cargo.toml"));
+        }
     }
 
     private record Chunk(String path, int startLine, int endLine, String text, List<String> terms) { }

@@ -37,4 +37,30 @@ final class LocalRagServiceTest {
         var rag = new LocalRagService(new WorkspaceGuard(workspace));
         assertThrows(IllegalArgumentException.class, () -> rag.ask("  "));
     }
+
+    @Test void prioritizesRootReadmeForBroadProjectOverviewQuestions() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "# Finance Agent\n这是一个面向个人理财的预算分析与风险提示系统。\n"
+                + "其他介绍。\n".repeat(8) + "## 目录\n- [功能特性](#功能特性)\n- [技术栈](#技术栈)\n");
+        Path interview = Files.createDirectories(workspace.resolve("interview-prep"));
+        Files.writeString(interview.resolve("高频问答.md"), "项目主要功能是什么？回答时先讲项目，再讲功能。\n".repeat(20));
+        Files.writeString(workspace.resolve("Service.java"), "class Service { void projectFunction() {} }\n");
+
+        var answer = new LocalRagService(new WorkspaceGuard(workspace)).ask("这个项目主要功能是什么？");
+
+        assertFalse(answer.evidence().isEmpty());
+        assertEquals("README.md", answer.evidence().get(0).path());
+        assertEquals(1, answer.evidence().get(0).startLine());
+        assertTrue(answer.answer().contains("个人理财"));
+        assertFalse(answer.answer().contains("<div"));
+        assertFalse(answer.answer().contains("](#"));
+    }
+
+    @Test void preservesSourceCodePrecisionForSpecificSymbolQueries() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "项目介绍和主要功能。\n");
+        Files.writeString(workspace.resolve("PaymentService.java"), "class PaymentService { void reconcileLedger() {} }\n");
+
+        var answer = new LocalRagService(new WorkspaceGuard(workspace)).ask("reconcileLedger 在哪里？");
+
+        assertEquals("PaymentService.java", answer.evidence().get(0).path());
+    }
 }
