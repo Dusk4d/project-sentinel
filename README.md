@@ -81,6 +81,9 @@ java -jar target/workspace-agent-0.3.0.jar --report-html D:\path\to\project D:\p
 # 启动带项目选择和“重新扫描”按钮的本地 Web 后端与看板；默认端口 8787
 java -jar target/workspace-agent-0.3.0.jar --serve D:\path\to\workspace 8787
 
+# 可选：为 Web Agent 启用持久记忆和中断恢复；状态目录应位于工作区之外
+java -jar target/workspace-agent-0.3.0.jar --serve D:\path\to\workspace 8787 D:\path\to\web-agent-state
+
 # 输出可供模型使用的 Function Calling 工具定义
 java -jar target/workspace-agent-0.3.0.jar --tools-json D:\path\to\workspace
 
@@ -143,6 +146,8 @@ java -jar target/workspace-agent-0.3.0.jar --list-rules
 使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项、缺少参数或多余参数会输出帮助并返回退出码 `2`；所有参数都必须被明确消费，避免定时脚本的拼写错误被静默忽略。
 
 `--serve` 启动后访问 `http://127.0.0.1:8787/`。服务在启动工作区向下四层发现项目，并在页面提供下拉选择；也可以点击“上传 ZIP 检测”选择本机压缩包。ZIP 只发送到本机回环服务，解压到启动工作区内的临时目录，完成静态分析后立即删除。上传限制为压缩包 20 MiB、解压总量 100 MiB、单文件 10 MiB 和 5000 个条目，并拒绝路径穿越。没有识别到构建清单或 Git 根时，将工作区本身作为单项目。服务只绑定本机回环地址，不接受其他电脑连接。`/api/projects` 返回启动时建立的项目白名单，常规分析接口只接受该白名单中的不透明 ID，不能用客户端路径越过启动工作区。页面调用 `/api/analysis?project=<id>`，上传则调用只接受 `application/zip` 的 `/api/upload-analysis`；后端都只扫描一次并同时返回 `report` 与 `plan`，保证健康分、发现和优先行动来自同一时刻。兼容接口 `/api/report` 继续保留。页面展示行动排名、理由、预计恢复分和理论目标分。接口只执行静态分析，不执行被扫描项目；`/api/health` 可用于确认后端存活。按 `Ctrl+C` 停止服务。页面响应明确声明 UTF-8，因此不受 PowerShell 代码页影响。
+
+若提供第四个参数作为 Agent 状态目录，Web 页面会为每个已发现项目使用独立子目录，并启用与 `--agent-ai-memory` 相同的持久记忆、进程锁和中断检查点；未提供时服务保持无状态且不会创建状态目录。状态目录应位于启动工作区之外并限制访问权限。`/api/health` 与 `/api/projects` 仅公开 `agentMemoryEnabled` 布尔状态，不公开目录路径或记忆内容。
 
 Web 服务还校验浏览器 `Origin`：只允许与当前服务端口同源的 `localhost`、`127.0.0.1` 或 IPv6 回环来源。未设置 `Origin` 的命令行客户端仍可调用 API，外部网页、错误端口及 `Origin: null` 会收到 403。
 

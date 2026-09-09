@@ -22,4 +22,8 @@ if not defined SENTINEL_JAR (
   echo Build succeeded but no workspace-agent JAR was found.
   exit /b 1
 )
-java -jar "%SENTINEL_JAR%" --serve "%SENTINEL_WORKSPACE%" "%SENTINEL_PORT%"
+if "%~3"=="" (
+  java -jar "%SENTINEL_JAR%" --serve "%SENTINEL_WORKSPACE%" "%SENTINEL_PORT%"
+) else (
+  java -jar "%SENTINEL_JAR%" --serve "%SENTINEL_WORKSPACE%" "%SENTINEL_PORT%" "%~3"
+)

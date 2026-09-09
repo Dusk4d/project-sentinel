@@ -28,6 +28,14 @@ Windows：
 .\start-web.cmd D:\path\to\workspace 8787
 ```
 
+需要 Web Agent 跨请求记忆和中断恢复时，第三个启动脚本参数指定工作区外的状态目录：
+
+```powershell
+.\start-web.cmd D:\path\to\workspace 8787 D:\sentinel-web-state
+```
+
+每个项目使用独立子目录。该目录可能包含用户任务、模型回答和受限工具输出，应限制访问并纳入敏感备份策略；不传第三个参数时不会启用或创建 Web Agent 状态。
+
 Linux/macOS：
 
 ```sh

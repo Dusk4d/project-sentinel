@@ -14,7 +14,12 @@ import local.agent.model.AiRagService;
 import local.agent.model.ModelConfig;
 import local.agent.model.OpenAiCompatibleClient;
 import local.agent.model.ToolCallingAgentService;
+import local.agent.model.AgentMemoryEntry;
+import local.agent.model.AgentMemoryStore;
+import local.agent.model.AgentCheckpointStore;
 import local.agent.WorkspaceAgent;
+import local.agent.state.StateRunLock;
+import local.agent.state.RunAlreadyActiveException;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -38,25 +43,38 @@ public final class LocalWebServer implements AutoCloseable {
     private final HttpServer server;
     private final ExecutorService executor;
     private final ModelConfig modelConfig;
+    private final Path agentStateDirectory;
 
     public LocalWebServer(Path workspace, int port) throws IOException {
-        this(workspace, port, new ScanAdmissionGate(), ModelConfig.optionalFromEnvironment().orElse(null));
+        this(workspace, port, new ScanAdmissionGate(), ModelConfig.optionalFromEnvironment().orElse(null), null);
     }
 
     public LocalWebServer(Path workspace, int port, ModelConfig modelConfig) throws IOException {
-        this(workspace, port, new ScanAdmissionGate(), java.util.Objects.requireNonNull(modelConfig, "modelConfig"));
+        this(workspace, port, new ScanAdmissionGate(), java.util.Objects.requireNonNull(modelConfig, "modelConfig"), null);
+    }
+
+    public LocalWebServer(Path workspace, int port, Path agentStateDirectory) throws IOException {
+        this(workspace, port, new ScanAdmissionGate(), ModelConfig.optionalFromEnvironment().orElse(null),
+                java.util.Objects.requireNonNull(agentStateDirectory, "agentStateDirectory"));
+    }
+
+    public LocalWebServer(Path workspace, int port, ModelConfig modelConfig, Path agentStateDirectory) throws IOException {
+        this(workspace, port, new ScanAdmissionGate(), java.util.Objects.requireNonNull(modelConfig, "modelConfig"),
+                java.util.Objects.requireNonNull(agentStateDirectory, "agentStateDirectory"));
     }
 
     LocalWebServer(Path workspace, int port, ScanAdmissionGate scanGate) throws IOException {
-        this(workspace, port, scanGate, null);
+        this(workspace, port, scanGate, null, null);
     }
 
-    private LocalWebServer(Path workspace, int port, ScanAdmissionGate scanGate, ModelConfig modelConfig) throws IOException {
+    private LocalWebServer(Path workspace, int port, ScanAdmissionGate scanGate, ModelConfig modelConfig,
+                           Path agentStateDirectory) throws IOException {
         if (port < 0 || port > 65_535) throw new IllegalArgumentException("端口必须在 0 到 65535 之间");
         this.scanGate = java.util.Objects.requireNonNull(scanGate, "scanGate");
         this.modelConfig = modelConfig;
         this.workspace = workspace.toRealPath();
         if (!Files.isDirectory(this.workspace)) throw new IOException("工作区不是目录: " + this.workspace);
+        this.agentStateDirectory = agentStateDirectory == null ? null : validatedExternalState(agentStateDirectory);
         ProjectDiscoveryResult discovery = new ProjectDiscovery().discoverBounded(this.workspace,
                 ProjectDiscovery.DEFAULT_MAX_DEPTH, MAX_WEB_PROJECTS);
         this.projects = discovery.projects().isEmpty() ? List.of(this.workspace) : discovery.projects();
@@ -78,6 +96,16 @@ public final class LocalWebServer implements AutoCloseable {
     public void start() { server.start(); }
     public int port() { return server.getAddress().getPort(); }
     public String url() { return "http://127.0.0.1:" + port() + "/"; }
+
+    private Path validatedExternalState(Path candidate) throws IOException {
+        Path normalized = candidate.toAbsolutePath().normalize();
+        Path existing = normalized;
+        while (existing != null && !Files.exists(existing)) existing = existing.getParent();
+        if (existing == null) throw new IOException("无法解析 Web Agent 状态目录");
+        Path resolved = existing.toRealPath().resolve(existing.relativize(normalized)).normalize();
+        if (resolved.startsWith(workspace)) throw new IOException("Web Agent 状态目录必须位于启动工作区之外");
+        return normalized;
+    }
 
     private void createContext(String path, HttpHandler handler) {
         server.createContext(path, exchange -> {
@@ -136,7 +164,8 @@ public final class LocalWebServer implements AutoCloseable {
         send(exchange, 200, "application/json; charset=utf-8",
                 "{\"status\":\"UP\",\"workspace\":" + JsonReportWriter.quote(workspace.toString())
                         + ",\"projectCount\":" + projects.size() + ",\"projectsTruncated\":" + projectsTruncated
-                        + ",\"scanBusy\":" + scanGate.busy() + ",\"modelEnabled\":" + (modelConfig != null) + "}\n");
+                        + ",\"scanBusy\":" + scanGate.busy() + ",\"modelEnabled\":" + (modelConfig != null)
+                        + ",\"agentMemoryEnabled\":" + (agentStateDirectory != null) + "}\n");
     }
 
     private void projects(HttpExchange exchange) throws IOException {
@@ -153,7 +182,8 @@ public final class LocalWebServer implements AutoCloseable {
         send(exchange, 200, "application/json; charset=utf-8",
                 out.append("],\"truncated\":").append(projectsTruncated)
                         .append(",\"maximumProjects\":").append(MAX_WEB_PROJECTS)
-                        .append(",\"modelEnabled\":").append(modelConfig != null).append("}\n").toString());
+                        .append(",\"modelEnabled\":").append(modelConfig != null)
+                        .append(",\"agentMemoryEnabled\":").append(agentStateDirectory != null).append("}\n").toString());
     }
 
     private void report(HttpExchange exchange) throws IOException {
@@ -289,7 +319,19 @@ public final class LocalWebServer implements AutoCloseable {
         try (lease) {
             String task = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
             var agent = new ToolCallingAgentService(new WorkspaceAgent(project), new OpenAiCompatibleClient(modelConfig));
-            send(exchange, 200, "application/json; charset=utf-8", agent.run(task).toJson());
+            if (agentStateDirectory == null) {
+                send(exchange, 200, "application/json; charset=utf-8", agent.run(task).toJson());
+            } else {
+                Path state = agentStateDirectory.resolve(projectId(project));
+                try (var ignored = StateRunLock.acquire(state, "web-agent-ai")) {
+                    var memory = new AgentMemoryStore(project, state);
+                    var checkpoints = new AgentCheckpointStore(project, state);
+                    var result = agent.runResumable(task, memory.readRecent(5), checkpoints);
+                    memory.append(new AgentMemoryEntry(java.time.Instant.now(), task, result.answer(),
+                            result.modelRounds(), result.toolCalls()));
+                    send(exchange, 200, "application/json; charset=utf-8", result.toJson());
+                }
+            }
         } catch (RequestTooLargeException tooLarge) {
             send(exchange, 413, "application/json; charset=utf-8", "{\"error\":\"task exceeds 8 KiB limit\"}\n");
         } catch (IllegalArgumentException invalid) {
@@ -298,6 +340,9 @@ public final class LocalWebServer implements AutoCloseable {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             send(exchange, 503, "application/json; charset=utf-8", "{\"error\":\"agent request interrupted\"}\n");
+        } catch (RunAlreadyActiveException busy) {
+            exchange.getResponseHeaders().set("Retry-After", "1");
+            send(exchange, 429, "application/json; charset=utf-8", "{\"error\":\"agent state already in use\"}\n");
         } catch (Exception e) {
             send(exchange, 502, "application/json; charset=utf-8",
                     "{\"error\":" + JsonReportWriter.quote(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "}\n");
@@ -433,6 +478,7 @@ public final class LocalWebServer implements AutoCloseable {
             .replace("$('ai').disabled=!d.modelEnabled;", "$('ai').disabled=!d.modelEnabled;$('agent').disabled=!d.modelEnabled;")
             .replace("（已配置，勾选后启用）", "（模型已配置，可使用增强 RAG 与 Agent）")
             .replace("（未配置模型，使用本地抽取式回答）", "（未配置模型，使用本地 RAG）")
+            .replace("d.modelEnabled?'（模型已配置，可使用增强 RAG 与 Agent）'", "d.modelEnabled?'（模型已配置，可使用增强 RAG 与 Agent'+(d.agentMemoryEnabled?'，已启用持久记忆':'')+'）'")
             .replace("+'，工具调用：'+data.toolCalls}catch", "+'，工具调用：'+data.toolCalls;const trace=data.trace||[];$('rag-evidence').replaceChildren(...trace.map(item=>{const x=document.createElement('div');x.className='evidence';x.textContent=item.sequence+'. '+item.name+(item.success?' · 成功':' · 失败');return x}))}catch")
             .replace("$('ask').addEventListener('click',ask);", "$('ask').addEventListener('click',ask);$('agent').addEventListener('click',runAgent);");
 }

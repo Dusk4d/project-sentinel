@@ -20,6 +20,7 @@ final class WindowsLauncherContractTest {
         assertTrue(launch > failureGuard, "只有成功构建后才能启动 JAR");
         assertTrue(script.contains("workspace-agent-*.jar"), "启动器必须动态发现 Maven 版本化构件");
         assertTrue(script.contains("if not defined SENTINEL_JAR"), "启动器必须拒绝缺失构件");
+        assertTrue(script.contains("\"%~3\""), "启动器必须透传可选 Web Agent 状态目录");
         assertFalse(script.matches("(?s).*workspace-agent-\\d+\\.\\d+\\.\\d+\\.jar.*"),
                 "启动器不得硬编码任何语义版本构件名");
     }

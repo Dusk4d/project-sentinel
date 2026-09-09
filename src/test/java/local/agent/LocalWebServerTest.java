@@ -48,6 +48,7 @@ final class LocalWebServerTest {
             assertTrue(health.body().contains("\"projectsTruncated\":false"));
             assertTrue(health.body().contains("\"scanBusy\":false"));
             assertTrue(health.body().contains("\"modelEnabled\":false"));
+            assertTrue(health.body().contains("\"agentMemoryEnabled\":false"));
 
             var report = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/report"))
                             .POST(HttpRequest.BodyPublishers.noBody()).build(),
@@ -102,6 +103,19 @@ final class LocalWebServerTest {
                     .POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
             assertEquals(404, missing.statusCode());
             assertEquals(405, method.statusCode());
+        }
+    }
+
+    @Test void allowsExternalAgentStateWhileModelRemainsOptional() throws Exception {
+        Path scanned = Files.createDirectory(project.resolve("scanned"));
+        Path state = project.resolve("state");
+        try (var server = new LocalWebServer(scanned, 0, state); var client = HttpClient.newHttpClient()) {
+            server.start();
+            assertFalse(Files.exists(state));
+            var health = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/health")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertTrue(health.body().contains("\"modelEnabled\":false"));
+            assertTrue(health.body().contains("\"agentMemoryEnabled\":true"));
         }
     }
 }

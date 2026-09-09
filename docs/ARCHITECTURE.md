@@ -49,6 +49,8 @@ ZIP 上传使用独立的 `ZipProjectUpload` 边界：请求体、条目数、�
 
 `/api/agent-ai` 将 Web 任务交给与 CLI 相同的 `ToolCallingAgentService` 和 `WorkspaceAgent`。浏览器只提交任务与已签发项目 ID，不能指定工具实现或文件系统根；整个工具循环占用共享准入许可，并返回版本化回答及轮次、调用次数。结果同步记录调用顺序、工具名与成功状态，CLI 和 Web 均可审计，同时不在轨迹中复制工具输出。
 
+Web 服务可选接受一个显式 Agent 状态根目录。启用后按项目不透明 ID 建立隔离子目录，并在共享准入许可内复用 `StateRunLock`、`AgentMemoryStore` 与 `AgentCheckpointStore`；默认不提供状态目录时仍为无状态模式。接口只返回能力布尔值，不泄露状态目录路径。
+
 `AtomicTextStore` 统一稳定输出文件的写入语义。每日运行只替换 Agent 状态目录内的 `latest.html` 和 `latest.json`，时间戳 Markdown 与 TSV 历史仅追加，不执行自动清理。
 
 `SnapshotStore` 把 TSV 当作有严格契约的单项目时序，读取和追加前都校验表头、取值范围、项目一致性与时间单调性。只有全部校验通过后才会原子替换历史文件。

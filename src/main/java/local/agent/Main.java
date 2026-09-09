@@ -112,7 +112,8 @@ public final class Main {
         }
         if (args.length >= 2 && args[0].equals("--serve")) {
             int port = args.length >= 3 ? parsePort(args[2]) : 8787;
-            runServer(Path.of(args[1]), port);
+            Path stateDirectory = args.length >= 4 ? Path.of(args[3]) : null;
+            runServer(Path.of(args[1]), port, stateDirectory);
             return;
         }
         if (args.length >= 2 && args[0].equals("--portfolio")) {
@@ -457,11 +458,13 @@ public final class Main {
         }
     }
 
-    private static void runServer(Path project, int port) {
-        try (var server = new LocalWebServer(project, port)) {
+    private static void runServer(Path project, int port, Path stateDirectory) {
+        try (var server = stateDirectory == null ? new LocalWebServer(project, port)
+                : new LocalWebServer(project, port, stateDirectory)) {
             server.start();
             System.out.println("Project Sentinel 本地服务已启动: " + server.url());
             System.out.println("按 Ctrl+C 停止。服务仅监听本机回环地址。");
+            if (stateDirectory != null) System.out.println("Web Agent 持久状态目录: " + stateDirectory.toAbsolutePath().normalize());
             new java.util.concurrent.CountDownLatch(1).await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

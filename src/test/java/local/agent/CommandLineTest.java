@@ -13,6 +13,7 @@ final class CommandLineTest {
         assertTrue(CommandLine.validate(new String[]{"--plan-json", "project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--serve", "project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--serve", "project", "8787"}).isEmpty());
+        assertTrue(CommandLine.validate(new String[]{"--serve", "project", "8787", "state"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--tools-json", "project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--call", "project", "read", "README.md"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--ask", "project", "如何启动"}).isEmpty());
@@ -42,7 +43,7 @@ final class CommandLineTest {
         assertTrue(CommandLine.validate(new String[]{"--version", "extra"}).orElseThrow().contains("参数过多"));
         assertTrue(CommandLine.validate(new String[]{"--check", "project", "ignored"}).orElseThrow().contains("参数过多"));
         assertTrue(CommandLine.validate(new String[]{"--serve"}).orElseThrow().contains("缺少参数"));
-        assertTrue(CommandLine.validate(new String[]{"--serve", "project", "8787", "extra"}).orElseThrow().contains("参数过多"));
+        assertTrue(CommandLine.validate(new String[]{"--serve", "project", "8787", "state", "extra"}).orElseThrow().contains("参数过多"));
         assertTrue(CommandLine.validate(new String[]{"--daily", "project", "state", "80", "5", "ignored"}).orElseThrow().contains("参数过多"));
         assertTrue(CommandLine.validate(new String[]{"one", "two"}).orElseThrow().contains("最多接受一个"));
     }

@@ -2,6 +2,8 @@ package local.agent.web;
 
 import com.sun.net.httpserver.HttpServer;
 import local.agent.model.ModelConfig;
+import local.agent.model.AgentMemoryStore;
+import local.agent.model.AgentCheckpointStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -66,6 +68,38 @@ final class WebAgentTest {
             assertTrue(response.body().contains("/api/agent-ai"));
             assertTrue(response.body().contains("Agent 分析"));
         }
+    }
+
+    @Test void persistsWebAgentMemoryAndCompletedCheckpointWhenStateIsConfigured() throws Exception {
+        Path project = Files.createDirectory(workspace.resolve("stateful-project"));
+        Files.writeString(project.resolve("README.md"), "demo", StandardCharsets.UTF_8);
+        Path state = workspace.resolve("web-agent-state");
+        var model = scriptedModel(List.of(
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"项目状态正常。\"}}]}"));
+        var config = new ModelConfig(URI.create("http://127.0.0.1:" + model.getAddress().getPort() + "/chat/completions"),
+                "test", "", Duration.ofSeconds(3));
+        try (var web = new LocalWebServer(project, 0, config, state); var client = HttpClient.newHttpClient()) {
+            web.start();
+            assertFalse(Files.exists(state), "启动服务不应提前创建状态目录");
+            var response = post(client, web.url() + "api/agent-ai", "检查项目");
+            assertEquals(200, response.statusCode());
+            Path projectState = state.resolve("root");
+            assertEquals(1, new AgentMemoryStore(project, projectState).readRecent(5).size());
+            assertTrue(AgentCheckpointStore.inspect(projectState).completed());
+            var health = client.send(HttpRequest.newBuilder(URI.create(web.url() + "api/health")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertTrue(health.body().contains("\"agentMemoryEnabled\":true"));
+        } finally { model.stop(0); }
+    }
+
+    @Test void rejectsWebAgentStateInsideScannedWorkspace() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "demo", StandardCharsets.UTF_8);
+        var config = new ModelConfig(URI.create("http://127.0.0.1:9/chat/completions"),
+                "test", "", Duration.ofSeconds(1));
+        assertTrue(assertThrows(java.io.IOException.class,
+                () -> new LocalWebServer(workspace, 0, config, workspace.resolve("private-state")))
+                .getMessage().contains("工作区之外"));
+        assertFalse(Files.exists(workspace.resolve("private-state")));
     }
 
     private HttpResponse<String> post(HttpClient client, String endpoint, String body) throws Exception {
