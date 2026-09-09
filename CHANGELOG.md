@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- Agent 最终回答现在强制要求至少一次成功的项目工具调用，防止模型跳过 Function Calling 直接生成无证据结论。
+- 模型请求默认超时由 30 秒调整为 120 秒，并支持 1–300 秒的环境变量配置，适配本机 Ollama 多轮工具调用。
+
 ### Added
 
 - 提供可共享的 IntelliJ IDEA XML 运行配置，预置本机 Ollama 接口与无密钥的小模型测试参数。

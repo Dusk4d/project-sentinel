@@ -67,7 +67,9 @@ final class ToolCallingAgentServiceTest {
     @Test void includesBoundedConversationMemoryBeforeCurrentTask() throws Exception {
         Files.writeString(workspace.resolve("README.md"), "demo");
         var requests = new ArrayList<String>();
-        var server = scriptedServer(List.of("{\"choices\":[{\"message\":{\"content\":\"新的回答\"}}]}"), requests);
+        var server = scriptedServer(List.of(
+                "{\"choices\":[{\"message\":{\"tool_calls\":[{\"id\":\"memory_1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"input\\\":\\\"README.md\\\"}\"}}]}}]}",
+                "{\"choices\":[{\"message\":{\"content\":\"新的回答\"}}]}"), requests);
         try {
             var history = List.of(new AgentMemoryEntry(java.time.Instant.parse("2026-01-01T00:00:00Z"),
                     "旧问题", "旧答案", 1, 0));
@@ -76,6 +78,52 @@ final class ToolCallingAgentServiceTest {
             assertTrue(requests.get(0).contains("历史任务：旧问题"));
             assertTrue(requests.get(0).contains("历史回答：旧答案"));
             assertTrue(requests.get(0).indexOf("历史任务") < requests.get(0).indexOf("追问"));
+        } finally { server.stop(0); }
+    }
+
+    @Test void requiresSuccessfulProjectEvidenceBeforeAcceptingFinalAnswer() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "真实项目说明", StandardCharsets.UTF_8);
+        var requests = new ArrayList<String>();
+        var server = scriptedServer(List.of(
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"未经检查的猜测\"}}]}",
+                "{\"choices\":[{\"message\":{\"tool_calls\":[{\"id\":\"ground_1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"input\\\":\\\"README.md\\\"}\"}}]}}]}",
+                "{\"choices\":[{\"message\":{\"content\":\"基于真实项目说明的回答\"}}]}"), requests);
+        try {
+            var result = service(server).run("这个项目是什么？");
+            assertEquals("基于真实项目说明的回答", result.answer());
+            assertEquals(3, result.modelRounds());
+            assertEquals(1, result.toolCalls());
+            assertTrue(requests.get(1).contains("必须获取足以支持结论的当前工作区证据"));
+            assertTrue(requests.get(2).contains("真实项目说明"));
+        } finally { server.stop(0); }
+    }
+
+    @Test void listAloneIsInsufficientForAContentQuestion() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "使用 start-web.cmd 启动", StandardCharsets.UTF_8);
+        var requests = new ArrayList<String>();
+        var server = scriptedServer(List.of(
+                "{\"choices\":[{\"message\":{\"tool_calls\":[{\"id\":\"list_1\",\"function\":{\"name\":\"list\",\"arguments\":\"{\\\"input\\\":\\\".\\\"}\"}}]}}]}",
+                "{\"choices\":[{\"message\":{\"content\":\"看到脚本，直接猜测启动方式\"}}]}",
+                "{\"choices\":[{\"message\":{\"tool_calls\":[{\"id\":\"read_1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"input\\\":\\\"README.md\\\"}\"}}]}}]}",
+                "{\"choices\":[{\"message\":{\"content\":\"运行 start-web.cmd。\"}}]}"), requests);
+        try {
+            var result = service(server).run("项目如何启动？");
+            assertEquals(4, result.modelRounds());
+            assertEquals(2, result.toolCalls());
+            assertEquals(List.of("list", "read"), result.trace().stream().map(AgentToolTrace::name).toList());
+            assertTrue(requests.get(2).contains("仅调用 list 不足以证明文件内容"));
+        } finally { server.stop(0); }
+    }
+
+    @Test void listIsSufficientWhenTaskOnlyRequestsAFileListing() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "demo", StandardCharsets.UTF_8);
+        var server = scriptedServer(List.of(
+                "{\"choices\":[{\"message\":{\"tool_calls\":[{\"id\":\"list_only_1\",\"function\":{\"name\":\"list\",\"arguments\":\"{\\\"input\\\":\\\".\\\"}\"}}]}}]}",
+                "{\"choices\":[{\"message\":{\"content\":\"根目录包含 README.md。\"}}]}"), new ArrayList<>());
+        try {
+            var result = service(server).run("列出根目录文件");
+            assertEquals(2, result.modelRounds());
+            assertEquals(1, result.toolCalls());
         } finally { server.stop(0); }
     }
 

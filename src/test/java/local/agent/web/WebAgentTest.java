@@ -110,6 +110,7 @@ final class WebAgentTest {
         Files.writeString(project.resolve("README.md"), "demo", StandardCharsets.UTF_8);
         Path state = workspace.resolve("web-agent-state");
         var model = scriptedModel(List.of(
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"state_1\",\"type\":\"function\",\"function\":{\"name\":\"health\",\"arguments\":\"{\\\"input\\\":\\\"\\\"}\"}}]}}]}",
                 "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"项目状态正常。\"}}]}"));
         var config = new ModelConfig(URI.create("http://127.0.0.1:" + model.getAddress().getPort() + "/chat/completions"),
                 "test", "", Duration.ofSeconds(3));

@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.Optional;
 
 public record ModelConfig(URI endpoint, String model, String apiKey, Duration timeout) {
+    private static final int DEFAULT_TIMEOUT_SECONDS = 120;
+    private static final int MAX_TIMEOUT_SECONDS = 300;
     public static ModelConfig fromEnvironment() {
         return from(System.getenv());
     }
@@ -29,7 +31,7 @@ public record ModelConfig(URI endpoint, String model, String apiKey, Duration ti
         if (!endpoint.getScheme().equalsIgnoreCase("https") && !isLoopback(endpoint.getHost())) {
             throw new IllegalArgumentException("远程模型地址必须使用 HTTPS；HTTP 只允许本机回环地址");
         }
-        return new ModelConfig(endpoint, model, key, Duration.ofSeconds(30));
+        return new ModelConfig(endpoint, model, key, Duration.ofSeconds(timeoutSeconds(environment)));
     }
 
     private static URI endpoint(String base) {
@@ -53,5 +55,17 @@ public record ModelConfig(URI endpoint, String model, String apiKey, Duration ti
         String value = environment.getOrDefault(name, "").strip();
         if (value.isEmpty()) throw new IllegalArgumentException("缺少环境变量 " + name);
         return value;
+    }
+
+    private static int timeoutSeconds(Map<String, String> environment) {
+        String value = environment.getOrDefault("SENTINEL_MODEL_TIMEOUT_SECONDS", "").strip();
+        if (value.isEmpty()) return DEFAULT_TIMEOUT_SECONDS;
+        try {
+            int seconds = Integer.parseInt(value);
+            if (seconds < 1 || seconds > MAX_TIMEOUT_SECONDS) throw new NumberFormatException();
+            return seconds;
+        } catch (NumberFormatException invalid) {
+            throw new IllegalArgumentException("SENTINEL_MODEL_TIMEOUT_SECONDS 必须是 1 到 300 的整数");
+        }
     }
 }

@@ -8,7 +8,7 @@ Project Sentinel 是一个基于 Java 21 的本地项目健康检查与行动规
 
 ## AI 能力
 
-Project Sentinel 提供可由大模型或自动化编排器消费的 Function Calling 协议。`--tools-json` 输出兼容常见 function tool 结构的名称、描述和 JSON Schema 参数；`--call` 按工具名执行，并返回带调用 ID、成功状态和转义输出的版本化 JSON。目前注册 `list`、`read`、`search`、`health` 和 `rag_query` 五个只读函数。`--agent-ai` 还会将这些 Schema 发给兼容模型，由模型选择工具，Agent 执行后把结果作为 `tool` 消息回传，直至形成最终回答。工具执行始终受同一个 `WorkspaceGuard` 约束，模型不能通过函数参数绕过工作区。
+Project Sentinel 提供可由大模型或自动化编排器消费的 Function Calling 协议。`--tools-json` 输出兼容常见 function tool 结构的名称、描述和 JSON Schema 参数；`--call` 按工具名执行，并返回带调用 ID、成功状态和转义输出的版本化 JSON。目前注册 `list`、`read`、`search`、`health` 和 `rag_query` 五个只读函数。`--agent-ai` 还会将这些 Schema 发给兼容模型，由模型选择工具，Agent 执行后把结果作为 `tool` 消息回传，直至形成最终回答。最终回答只有在取得足够的项目工具证据后才会被接受：列目录任务可由 `list` 支撑，而功能、启动和架构等内容问题必须成功执行 `read`、`search`、`health` 或 `rag_query`，避免模型看到文件名就直接猜测。工具执行始终受同一个 `WorkspaceGuard` 约束，模型不能通过函数参数绕过工作区。
 
 本地 RAG 不依赖向量数据库或云端 embedding：它对受限文本文件分块，为英文词和中文字符/双字词建立内存索引，使用 BM25 风格评分返回最多五条证据。对“项目是什么、主要功能、怎么启动、架构、技术栈、测试”等常见意图，会过滤低信息词并优先 README、架构文档、构建清单或测试代码，同时降低面试稿、报告和临时生成内容对概括问题的干扰；同文件重叠片段会去重。每条证据包含相对路径、起止行和相关度；回答为清理展示标记后的保守抽取式摘要，并明确要求结合来源核验。`.env`、凭据、私钥、构建输出、依赖目录、超大文件和越界符号链接不会进入索引。该能力是真实的检索增强，但不等同于已经接入生成式大模型。
 
@@ -99,6 +99,8 @@ java -jar target/workspace-agent-0.3.0.jar --ask-json D:\path\to\workspace "项�
 # 可选：使用兼容 OpenAI Chat Completions 的模型增强 RAG
 $env:SENTINEL_MODEL_BASE_URL = "http://127.0.0.1:11434/v1"
 $env:SENTINEL_MODEL_NAME = "本机已安装的模型名"
+# 可选：单次模型请求超时秒数，默认 120，范围 1-300
+$env:SENTINEL_MODEL_TIMEOUT_SECONDS = "180"
 # 仅需要鉴权的服务才设置 SENTINEL_MODEL_API_KEY；不要写入仓库文件
 java -jar target/workspace-agent-0.3.0.jar --ask-ai D:\path\to\workspace "项目怎么启动？"
 
