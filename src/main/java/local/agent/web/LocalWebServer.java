@@ -514,5 +514,12 @@ public final class LocalWebServer implements AutoCloseable {
             .replace("$('projects').addEventListener('change',scan);await scan()", "$('projects').addEventListener('change',async()=>{await scan();await refreshAgentState()});await scan();await refreshAgentState()")
             .replace("}))}catch(e){$('rag-answer').textContent=e.message", "}));await refreshAgentState()}catch(e){$('rag-answer').textContent=e.message")
             .replace("+'，工具调用：'+data.toolCalls}catch", "+'，工具调用：'+data.toolCalls;const trace=data.trace||[];$('rag-evidence').replaceChildren(...trace.map(item=>{const x=document.createElement('div');x.className='evidence';x.textContent=item.sequence+'. '+item.name+(item.success?' · 成功':' · 失败');return x}))}catch")
-            .replace("$('ask').addEventListener('click',ask);", "$('ask').addEventListener('click',ask);$('agent').addEventListener('click',runAgent);");
+            .replace("$('ask').addEventListener('click',ask);", "$('ask').addEventListener('click',ask);$('agent').addEventListener('click',runAgent);")
+            .replace("</header><section", "</header><div id=\"upload-status\" class=\"muted\" role=\"status\" aria-live=\"polite\">ZIP 上限 20 MiB；选择后会自动开始检测。</div><section")
+            .replace("async function upload(file){if(file.size>20*1024*1024){showError(Error('ZIP 不能超过 20 MiB'));return}",
+                    "async function upload(file){const status=$('upload-status');$('zip').value='';status.classList.remove('error');if(!file){status.textContent='没有选择 ZIP 文件。';return}if(file.size>20*1024*1024){const message='ZIP 不能超过 20 MiB（当前 '+(file.size/1024/1024).toFixed(1)+' MiB）。';status.textContent=message;status.classList.add('error');showError(Error(message));return}")
+            .replace("b.disabled=true;b.textContent='上传检测中…';try{const r=await fetch('/api/upload-analysis'",
+                    "b.disabled=true;b.textContent='上传检测中…';status.textContent='正在上传并检测 '+file.name+'…';try{const r=await fetch('/api/upload-analysis'")
+            .replace("if(!r.ok)throw Error(bundle.error||'上传检测失败');render(bundle)}catch(e){showError(e)}finally{b.disabled=false;b.textContent='上传 ZIP 检测';$('zip').value=''}}",
+                    "if(!r.ok)throw Error(bundle.error||'上传检测失败');render(bundle);status.textContent='检测完成：'+file.name}catch(e){status.textContent='检测失败：'+e.message;status.classList.add('error');showError(e)}finally{b.disabled=false;b.textContent='上传 ZIP 检测'}}");
 }

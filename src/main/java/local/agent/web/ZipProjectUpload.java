@@ -1,13 +1,18 @@
 package local.agent.web;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
+import java.nio.charset.MalformedInputException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Comparator;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipException;
 
 final class ZipProjectUpload implements AutoCloseable {
     static final long MAX_ARCHIVE_BYTES = 20L * 1024 * 1024;
@@ -27,9 +32,18 @@ final class ZipProjectUpload implements AutoCloseable {
         Path temporary = Files.createTempDirectory(workspace, ".sentinel-upload-");
         try {
             Path extracted = Files.createDirectory(temporary.resolve("project"));
-            unpack(input, extracted);
+            byte[] archive;
+            try (var bounded = new BoundedInputStream(input)) { archive = bounded.readAllBytes(); }
+            try {
+                unpack(archive, extracted, StandardCharsets.UTF_8);
+            } catch (IOException | IllegalArgumentException malformedName) {
+                if (!isBadEntryName(malformedName)) throw malformedName;
+                deleteTree(extracted);
+                extracted = Files.createDirectory(temporary.resolve("project"));
+                unpack(archive, extracted, Charset.forName("GBK"));
+            }
             return new ZipProjectUpload(temporary, collapseSingleTopLevelDirectory(extracted));
-        } catch (IOException failure) {
+        } catch (IOException | RuntimeException failure) {
             deleteTree(temporary);
             throw failure;
         }
@@ -37,11 +51,20 @@ final class ZipProjectUpload implements AutoCloseable {
 
     Path projectRoot() { return projectRoot; }
 
-    private static void unpack(InputStream raw, Path target) throws IOException {
+    private static boolean isBadEntryName(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof MalformedInputException) return true;
+            if (cause instanceof ZipException && cause.getMessage() != null
+                    && cause.getMessage().contains("bad entry name")) return true;
+        }
+        return false;
+    }
+
+    private static void unpack(byte[] archive, Path target, Charset charset) throws IOException {
         long expandedBytes = 0;
         int entries = 0;
         byte[] buffer = new byte[16 * 1024];
-        try (var bounded = new BoundedInputStream(raw); var zip = new ZipInputStream(bounded)) {
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(archive), charset)) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
                 if (++entries > MAX_ENTRIES) throw new UploadRejectedException("ZIP 文件条目超过 5000 个限制");

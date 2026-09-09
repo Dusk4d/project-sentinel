@@ -30,6 +30,9 @@ final class LocalWebServerTest {
             assertTrue(page.headers().firstValue("content-type").orElseThrow().contains("charset=utf-8"));
             assertTrue(page.body().contains("重新扫描"));
             assertTrue(page.body().contains("上传 ZIP 检测"));
+            assertTrue(page.body().contains("id=\"upload-status\""));
+            assertTrue(page.body().contains("aria-live=\"polite\""));
+            assertTrue(page.body().contains("检测完成："));
             assertTrue(page.body().contains("id=\"download\" disabled>下载 JSON"));
             assertTrue(page.body().contains("-sentinel-analysis.json"));
             assertTrue(page.body().contains("项目智能助手"));

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.zip.ZipEntry;
@@ -40,6 +41,20 @@ final class ZipProjectUploadTest {
                         ZipProjectUpload.MAX_ARCHIVE_BYTES + 1));
         assertTrue(failure.getMessage().contains("20 MiB"));
         try (var children = Files.list(workspace)) { assertEquals(0, children.count()); }
+    }
+
+    @Test void extractsLegacyGbkEntryNamesWhenUtf8DecodingFails() throws Exception {
+        var bytes = new ByteArrayOutputStream();
+        try (var zip = new ZipOutputStream(bytes, Charset.forName("GBK"))) {
+            zip.putNextEntry(new ZipEntry("文档/说明.md"));
+            zip.write("中文内容".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+
+        try (var upload = ZipProjectUpload.extract(new ByteArrayInputStream(bytes.toByteArray()), workspace, bytes.size())) {
+            assertEquals("文档", upload.projectRoot().getFileName().toString());
+            assertEquals("中文内容", Files.readString(upload.projectRoot().resolve("说明.md")));
+        }
     }
 
     private static byte[] archive(String... nameAndContent) throws Exception {
