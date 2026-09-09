@@ -103,6 +103,10 @@ final class ToolCallingAgentServiceTest {
             assertEquals(3, requests.size());
             assertTrue(requests.get(2).contains("\"role\":\"tool\""));
             assertTrue(requests.get(2).contains("start-web.cmd"));
+            assertEquals(result, checkpoints.loadPendingResult("检查启动方式").orElseThrow());
+            assertEquals(result, service(server).runResumable("检查启动方式", List.of(), checkpoints));
+            assertEquals(3, requests.size(), "待写入记忆的最终结果必须直接恢复，不得再次调用模型");
+            checkpoints.markCompleted("检查启动方式");
             assertTrue(checkpoints.load("新任务").isEmpty());
         } finally { server.stop(0); }
     }

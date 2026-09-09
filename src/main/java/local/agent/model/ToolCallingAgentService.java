@@ -48,6 +48,8 @@ public final class ToolCallingAgentService {
         int completedRounds = 0;
         int totalCalls = 0;
         if (checkpoints != null) {
+            var pending = checkpoints.loadPendingResult(request);
+            if (pending.isPresent()) return pending.get();
             var saved = checkpoints.load(request);
             if (saved.isPresent()) {
                 AgentCheckpoint checkpoint = saved.get();
@@ -69,8 +71,9 @@ public final class ToolCallingAgentService {
             ModelTurn turn = model.completeTurn(SYSTEM, messages, workspace.toolsJson());
             if (turn.toolCalls().isEmpty()) {
                 if (turn.content().isBlank()) throw new IOException("模型既未给出回答也未调用工具");
-                if (checkpoints != null) checkpoints.markCompleted(request);
-                return new ToolCallingAgentResult(turn.content(), round, totalCalls, trace);
+                var result = new ToolCallingAgentResult(turn.content(), round, totalCalls, trace);
+                if (checkpoints != null) checkpoints.savePendingResult(request, result, messages);
+                return result;
             }
             messages.add(turn.assistantMessageJson());
             for (ModelToolCall call : turn.toolCalls()) {

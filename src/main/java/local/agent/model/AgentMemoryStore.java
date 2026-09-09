@@ -36,6 +36,14 @@ public final class AgentMemoryStore {
     }
 
     public Path append(AgentMemoryEntry entry) throws IOException {
+        return append(entry, false);
+    }
+
+    public Path appendIfLastEquivalent(AgentMemoryEntry entry) throws IOException {
+        return append(entry, true);
+    }
+
+    private Path append(AgentMemoryEntry entry, boolean skipEquivalentLast) throws IOException {
         if (entry == null || entry.completedAt() == null || entry.task() == null || entry.answer() == null)
             throw new IllegalArgumentException("记忆记录字段不能为空");
         if (entry.task().length() > MAX_TASK_CHARS) throw new IllegalArgumentException("记忆任务超过 8192 字符限制");
@@ -43,6 +51,7 @@ public final class AgentMemoryStore {
             throw new IllegalArgumentException("记忆轮次或工具调用数超出范围");
         String answer = truncate(entry.answer(), MAX_ANSWER_CHARS);
         var all = new ArrayList<>(readAll());
+        if (skipEquivalentLast && !all.isEmpty() && equivalent(all.get(all.size() - 1), entry)) return file;
         if (!all.isEmpty() && entry.completedAt().isBefore(all.get(all.size() - 1).completedAt()))
             throw new IllegalArgumentException("新记忆时间不能早于已有记录");
         all.add(new AgentMemoryEntry(entry.completedAt(), entry.task(), answer, entry.modelRounds(), entry.toolCalls()));
@@ -54,6 +63,11 @@ public final class AgentMemoryStore {
         }
         if (content.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_BYTES) throw new IOException("Agent 记忆记录超过 1 MiB 限制");
         return new AtomicTextStore().write(file, content);
+    }
+
+    private boolean equivalent(AgentMemoryEntry left, AgentMemoryEntry right) {
+        return left.task().equals(right.task()) && left.answer().equals(right.answer())
+                && left.modelRounds() == right.modelRounds() && left.toolCalls() == right.toolCalls();
     }
 
     private List<AgentMemoryEntry> readAll() throws IOException {

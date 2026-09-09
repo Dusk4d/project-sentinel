@@ -326,9 +326,12 @@ public final class LocalWebServer implements AutoCloseable {
                 try (var ignored = StateRunLock.acquire(state, "web-agent-ai")) {
                     var memory = new AgentMemoryStore(project, state);
                     var checkpoints = new AgentCheckpointStore(project, state);
+                    boolean recoveringReady = checkpoints.loadPendingResult(task).isPresent();
                     var result = agent.runResumable(task, memory.readRecent(5), checkpoints);
-                    memory.append(new AgentMemoryEntry(java.time.Instant.now(), task, result.answer(),
-                            result.modelRounds(), result.toolCalls()));
+                    var entry = new AgentMemoryEntry(java.time.Instant.now(), task, result.answer(),
+                            result.modelRounds(), result.toolCalls());
+                    if (recoveringReady) memory.appendIfLastEquivalent(entry); else memory.append(entry);
+                    checkpoints.markCompleted(task);
                     send(exchange, 200, "application/json; charset=utf-8", result.toJson());
                 }
             }

@@ -55,4 +55,14 @@ final class AgentMemoryStoreTest {
         assertTrue(entries.size() < 20);
         assertEquals("task-19", entries.get(entries.size() - 1).task());
     }
+
+    @Test void idempotentRecoveryAppendSkipsOnlyEquivalentLastEntry() throws Exception {
+        Path project = Files.createDirectories(temporary.resolve("project"));
+        var store = new AgentMemoryStore(project, temporary.resolve("state"));
+        store.append(new AgentMemoryEntry(Instant.parse("2026-01-01T00:00:00Z"), "task", "answer", 2, 1));
+        store.appendIfLastEquivalent(new AgentMemoryEntry(Instant.parse("2026-01-02T00:00:00Z"), "task", "answer", 2, 1));
+        assertEquals(1, store.readRecent(100).size());
+        store.appendIfLastEquivalent(new AgentMemoryEntry(Instant.parse("2026-01-03T00:00:00Z"), "task", "changed", 2, 1));
+        assertEquals(2, store.readRecent(100).size());
+    }
 }

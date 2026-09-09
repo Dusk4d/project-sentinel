@@ -403,7 +403,7 @@ public final class Main {
                 System.out.println("操作: " + status.metadata().operation());
             }
             var checkpoint = AgentCheckpointStore.inspect(stateDirectory);
-            System.out.println("Agent 检查点: " + (!checkpoint.present() ? "NONE" : checkpoint.completed() ? "COMPLETED" : "ACTIVE"));
+            System.out.println("Agent 检查点: " + (!checkpoint.present() ? "NONE" : checkpoint.completed() ? "COMPLETED" : checkpoint.ready() ? "READY" : "ACTIVE"));
             if (checkpoint.present() && !checkpoint.completed()) {
                 System.out.println("检查点工作区: " + checkpoint.workspace());
                 System.out.println("检查点任务: " + checkpoint.task());
@@ -521,8 +521,11 @@ public final class Main {
                 var agent = new WorkspaceAgent(workspace);
                 var model = new OpenAiCompatibleClient(config);
                 var checkpoints = new AgentCheckpointStore(workspace, stateDirectory);
+                boolean recoveringReady = checkpoints.loadPendingResult(task).isPresent();
                 var result = new ToolCallingAgentService(agent, model).runResumable(task, memory.readRecent(5), checkpoints);
-                memory.append(new AgentMemoryEntry(java.time.Instant.now(), task, result.answer(), result.modelRounds(), result.toolCalls()));
+                var entry = new AgentMemoryEntry(java.time.Instant.now(), task, result.answer(), result.modelRounds(), result.toolCalls());
+                if (recoveringReady) memory.appendIfLastEquivalent(entry); else memory.append(entry);
+                checkpoints.markCompleted(task);
                 System.out.print(result.renderText());
                 System.out.println("记忆文件：" + memory.file());
             }

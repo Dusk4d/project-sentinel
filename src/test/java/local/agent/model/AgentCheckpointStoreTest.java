@@ -40,6 +40,21 @@ final class AgentCheckpointStoreTest {
         assertFalse(Files.exists(state));
     }
 
+    @Test void persistsFinalResultUntilCallerCommitsMemory() throws Exception {
+        Path workspace = Files.createDirectory(temporary.resolve("result-project"));
+        var store = new AgentCheckpointStore(workspace, temporary.resolve("result-state"));
+        var result = new ToolCallingAgentResult("最终回答", 2, 1,
+                List.of(new AgentToolTrace(1, "read", true)));
+        store.savePendingResult("task", result,
+                List.of("{\"role\":\"user\",\"content\":\"task\"}"));
+        assertEquals(result, store.loadPendingResult("task").orElseThrow());
+        var status = AgentCheckpointStore.inspect(temporary.resolve("result-state"));
+        assertTrue(status.ready());
+        assertFalse(status.completed());
+        store.markCompleted("task");
+        assertTrue(store.loadPendingResult("task").isEmpty());
+    }
+
     @Test void rejectsCheckpointOwnedByAnotherWorkspace() throws Exception {
         Path first = Files.createDirectory(temporary.resolve("first"));
         Path second = Files.createDirectory(temporary.resolve("second"));
