@@ -28,6 +28,8 @@ README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_C
 
 应用版本以 `pom.xml` 为唯一来源，构建时写入运行时资源，并由 CLI、发行包和标签发布共同校验。构建产物使用固定时间戳；在相同源码和工具链下连续构建会产生相同的 JAR 与 ZIP 校验和。
 
+使用 IntelliJ IDEA 时，项目自带共享运行配置 `.run/Project Sentinel Web.run.xml`。打开项目并完成 Maven 导入后，在右上角选择 **Project Sentinel Web**，点击 Run 即可启动 `local.agent.Main`。该配置扫描项目父目录、监听 8787 端口，并预置本机 Ollama 的 `http://127.0.0.1:11434/v1` 与 `qwen3:1.7b`；Ollama 未运行时本地扫描与普通 RAG 仍可用，模型增强请求会失败。共享 XML 不包含 API 密钥，使用付费服务时只在 IDEA 本机运行配置或操作系统环境中填写 `SENTINEL_MODEL_API_KEY`，不要提交到 Git。
+
 Windows 最快捷的方式是在资源管理器中双击 `start-web.cmd`。它默认扫描本项目的父目录、使用端口 8787，并在每次启动时调用 Maven Wrapper 执行增量打包，确保不会运行源码更新前留下的陈旧 JAR。构建失败时不会启动服务。启动后访问 `http://127.0.0.1:8787/`，可在页面选择项目、扫描健康度，并使用本地 RAG、模型增强 RAG 或 Function Calling Agent。关闭窗口或按 `Ctrl+C` 停止。
 
 也可以在 PowerShell 中指定工作区和端口：
