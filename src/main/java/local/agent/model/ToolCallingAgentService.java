@@ -29,22 +29,47 @@ public final class ToolCallingAgentService {
     }
 
     public ToolCallingAgentResult run(String task, List<AgentMemoryEntry> memory) throws IOException, InterruptedException {
+        return run(task, memory, null);
+    }
+
+    public ToolCallingAgentResult runResumable(String task, List<AgentMemoryEntry> memory,
+                                                AgentCheckpointStore checkpoints) throws IOException, InterruptedException {
+        if (checkpoints == null) throw new IllegalArgumentException("Agent 检查点存储不能为空");
+        return run(task, memory, checkpoints);
+    }
+
+    private ToolCallingAgentResult run(String task, List<AgentMemoryEntry> memory,
+                                       AgentCheckpointStore checkpoints) throws IOException, InterruptedException {
         String request = task == null ? "" : task.strip();
         if (request.isEmpty()) throw new IllegalArgumentException("Agent 任务不能为空");
         if (request.length() > 8 * 1024) throw new IllegalArgumentException("Agent 任务超过 8192 字符限制");
         var messages = new ArrayList<String>();
         var trace = new ArrayList<AgentToolTrace>();
-        List<AgentMemoryEntry> recent = memory == null ? List.of() : memory.subList(Math.max(0, memory.size() - 5), memory.size());
-        for (AgentMemoryEntry entry : recent) {
-            messages.add("{\"role\":\"user\",\"content\":" + JsonReportWriter.quote("历史任务：" + limited(entry.task(), 2 * 1024)) + "}");
-            messages.add("{\"role\":\"assistant\",\"content\":" + JsonReportWriter.quote("历史回答：" + limited(entry.answer(), 4 * 1024)) + "}");
-        }
-        messages.add("{\"role\":\"user\",\"content\":" + JsonReportWriter.quote(request) + "}");
+        int completedRounds = 0;
         int totalCalls = 0;
-        for (int round = 1; round <= MAX_MODEL_ROUNDS; round++) {
+        if (checkpoints != null) {
+            var saved = checkpoints.load(request);
+            if (saved.isPresent()) {
+                AgentCheckpoint checkpoint = saved.get();
+                messages.addAll(checkpoint.messages());
+                trace.addAll(checkpoint.trace());
+                completedRounds = checkpoint.completedRounds();
+                totalCalls = checkpoint.toolCalls();
+            }
+        }
+        List<AgentMemoryEntry> recent = memory == null ? List.of() : memory.subList(Math.max(0, memory.size() - 5), memory.size());
+        if (messages.isEmpty()) {
+            for (AgentMemoryEntry entry : recent) {
+                messages.add("{\"role\":\"user\",\"content\":" + JsonReportWriter.quote("历史任务：" + limited(entry.task(), 2 * 1024)) + "}");
+                messages.add("{\"role\":\"assistant\",\"content\":" + JsonReportWriter.quote("历史回答：" + limited(entry.answer(), 4 * 1024)) + "}");
+            }
+            messages.add("{\"role\":\"user\",\"content\":" + JsonReportWriter.quote(request) + "}");
+        }
+        for (int round = completedRounds + 1; round <= MAX_MODEL_ROUNDS; round++) {
             ModelTurn turn = model.completeTurn(SYSTEM, messages, workspace.toolsJson());
             if (turn.toolCalls().isEmpty()) {
                 if (turn.content().isBlank()) throw new IOException("模型既未给出回答也未调用工具");
+                if (checkpoints != null) checkpoints.markCompleted(request);
                 return new ToolCallingAgentResult(turn.content(), round, totalCalls, trace);
             }
             messages.add(turn.assistantMessageJson());
@@ -56,6 +81,8 @@ public final class ToolCallingAgentService {
                 messages.add("{\"role\":\"tool\",\"tool_call_id\":" + JsonReportWriter.quote(call.id())
                         + ",\"content\":" + JsonReportWriter.quote(result.output()) + "}");
             }
+            if (checkpoints != null)
+                checkpoints.save(new AgentCheckpoint(request, round, totalCalls, messages, trace));
         }
         throw new IOException("模型在 " + MAX_MODEL_ROUNDS + " 轮内未完成任务");
     }

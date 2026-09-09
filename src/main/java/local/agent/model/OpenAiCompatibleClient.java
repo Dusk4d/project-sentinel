@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class OpenAiCompatibleClient {
@@ -74,7 +75,11 @@ public final class OpenAiCompatibleClient {
                 calls.add(new ModelToolCall(id, name, arguments));
             }
         }
-        return new ModelTurn(content, List.copyOf(calls), JsonCodec.write(message));
+        var normalized = new LinkedHashMap<String, Object>();
+        normalized.put("role", "assistant");
+        if (message.containsKey("content")) normalized.put("content", message.get("content"));
+        if (message.containsKey("tool_calls")) normalized.put("tool_calls", message.get("tool_calls"));
+        return new ModelTurn(content, List.copyOf(calls), JsonCodec.write(normalized));
     }
 
     private static String requiredString(Map<String, Object> object, String name) throws IOException {

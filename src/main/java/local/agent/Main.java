@@ -39,6 +39,7 @@ import local.agent.model.OpenAiCompatibleClient;
 import local.agent.model.ToolCallingAgentService;
 import local.agent.model.AgentMemoryEntry;
 import local.agent.model.AgentMemoryStore;
+import local.agent.model.AgentCheckpointStore;
 
 public final class Main {
     public static void main(String[] args) {
@@ -508,7 +509,8 @@ public final class Main {
                 var memory = new AgentMemoryStore(workspace, stateDirectory);
                 var agent = new WorkspaceAgent(workspace);
                 var model = new OpenAiCompatibleClient(config);
-                var result = new ToolCallingAgentService(agent, model).run(task, memory.readRecent(5));
+                var checkpoints = new AgentCheckpointStore(workspace, stateDirectory);
+                var result = new ToolCallingAgentService(agent, model).runResumable(task, memory.readRecent(5), checkpoints);
                 memory.append(new AgentMemoryEntry(java.time.Instant.now(), task, result.answer(), result.modelRounds(), result.toolCalls()));
                 System.out.print(result.renderText());
                 System.out.println("记忆文件：" + memory.file());

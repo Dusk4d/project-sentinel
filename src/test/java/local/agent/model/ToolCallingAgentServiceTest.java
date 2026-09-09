@@ -37,6 +37,7 @@ final class ToolCallingAgentServiceTest {
             assertTrue(requests.get(0).contains("\"tools\":["));
             assertTrue(requests.get(0).contains("\"name\":\"read\""));
             assertTrue(requests.get(1).contains("\"role\":\"tool\""));
+            assertTrue(requests.get(1).contains("\"role\":\"assistant\""));
             assertTrue(requests.get(1).contains("start-web.cmd"));
             assertTrue(requests.get(1).contains("\"tool_call_id\":\"call_1\""));
             assertTrue(result.renderText().contains("read [成功]"));
@@ -75,6 +76,34 @@ final class ToolCallingAgentServiceTest {
             assertTrue(requests.get(0).contains("历史任务：旧问题"));
             assertTrue(requests.get(0).contains("历史回答：旧答案"));
             assertTrue(requests.get(0).indexOf("历史任务") < requests.get(0).indexOf("追问"));
+        } finally { server.stop(0); }
+    }
+
+    @Test void resumesAfterModelFailureWithoutRepeatingCompletedToolRound() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "运行 start-web.cmd 后访问 8787。", StandardCharsets.UTF_8);
+        var requests = new ArrayList<String>();
+        var responses = List.of(
+                "{\"choices\":[{\"message\":{\"tool_calls\":[{\"id\":\"resume_1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"input\\\":\\\"README.md\\\"}\"}}]}}]}",
+                "not-json",
+                "{\"choices\":[{\"message\":{\"content\":\"从检查点恢复完成。\"}}]}"
+        );
+        var server = scriptedServer(responses, requests);
+        Path state = workspace.resolve("state");
+        try {
+            var checkpoints = new AgentCheckpointStore(workspace, state);
+            assertThrows(java.io.IOException.class,
+                    () -> service(server).runResumable("检查启动方式", List.of(), checkpoints));
+            AgentCheckpoint saved = checkpoints.load("检查启动方式").orElseThrow();
+            assertEquals(1, saved.completedRounds());
+            assertEquals(1, saved.toolCalls());
+            var result = service(server).runResumable("检查启动方式", List.of(), checkpoints);
+            assertEquals("从检查点恢复完成。", result.answer());
+            assertEquals(2, result.modelRounds());
+            assertEquals(1, result.toolCalls());
+            assertEquals(3, requests.size());
+            assertTrue(requests.get(2).contains("\"role\":\"tool\""));
+            assertTrue(requests.get(2).contains("start-web.cmd"));
+            assertTrue(checkpoints.load("新任务").isEmpty());
         } finally { server.stop(0); }
     }
 
