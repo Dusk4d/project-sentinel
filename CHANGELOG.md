@@ -9,6 +9,7 @@
 - 构建生成可复现 CycloneDX 1.6 JSON SBOM，并随 ZIP、CI 制品和正式 Release 分发。
 - 标签发布为 ZIP、校验文件和 SBOM 生成可验证的 SLSA 来源证明，并把 CycloneDX SBOM 作为 ZIP 的签名证明关联到 GitHub。
 - 带记忆的 Function Calling Agent 在每个完整工具轮次后保存有界原子检查点，模型中断后可用同一任务恢复而不重复已完成轮次。
+- `--state-status` 显示 Agent 检查点状态、绑定工作区、原任务和已完成调用计数，支持无人值守故障诊断。
 
 ## 0.3.0 - 2026-09-09
 

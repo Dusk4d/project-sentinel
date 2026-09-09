@@ -26,6 +26,21 @@ public final class AgentCheckpointStore {
 
     public Path file() { return file; }
 
+    public static AgentCheckpointStatus inspect(Path stateDirectory) throws IOException {
+        Path file = stateDirectory.toAbsolutePath().normalize().resolve(FILE_NAME);
+        if (!Files.exists(file)) return AgentCheckpointStatus.absent();
+        if (!Files.isRegularFile(file) || Files.size(file) > MAX_BYTES)
+            throw new IOException("Agent 检查点无效或超过 1 MiB 限制");
+        Map<String, Object> root = JsonCodec.object(JsonCodec.parse(Files.readString(file, StandardCharsets.UTF_8)), "检查点根值");
+        if (number(root.get("schemaVersion"), "schemaVersion") != 1) throw new IOException("不支持的 Agent 检查点版本");
+        String workspace = string(root.get("workspace"), "workspace");
+        String task = string(root.get("task"), "task");
+        boolean completed = bool(root.get("completed"), "completed");
+        int rounds = completed ? 0 : bounded(root.get("completedRounds"), "completedRounds", 0, 5);
+        int calls = completed ? 0 : bounded(root.get("toolCalls"), "toolCalls", 0, 20);
+        return new AgentCheckpointStatus(true, completed, workspace, task, rounds, calls);
+    }
+
     public Optional<AgentCheckpoint> load(String task) throws IOException {
         if (!Files.exists(file)) return Optional.empty();
         if (!Files.isRegularFile(file) || Files.size(file) > MAX_BYTES)
@@ -33,7 +48,7 @@ public final class AgentCheckpointStore {
         Map<String, Object> root = JsonCodec.object(JsonCodec.parse(Files.readString(file, StandardCharsets.UTF_8)), "检查点根值");
         if (number(root.get("schemaVersion"), "schemaVersion") != 1) throw new IOException("不支持的 Agent 检查点版本");
         if (!workspace.equals(string(root.get("workspace"), "workspace"))) throw new IOException("Agent 检查点属于其他工作区");
-        if (Boolean.TRUE.equals(root.get("completed"))) return Optional.empty();
+        if (bool(root.get("completed"), "completed")) return Optional.empty();
         String savedTask = string(root.get("task"), "task");
         if (!savedTask.equals(task)) throw new IOException("存在其他未完成 Agent 任务，请使用原任务恢复");
         int rounds = bounded(root.get("completedRounds"), "completedRounds", 0, 5);

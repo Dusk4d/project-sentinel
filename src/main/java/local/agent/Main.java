@@ -401,6 +401,14 @@ public final class Main {
                 System.out.println("开始: " + (status.metadata().startedAt() == null ? "unknown" : status.metadata().startedAt()));
                 System.out.println("操作: " + status.metadata().operation());
             }
+            var checkpoint = AgentCheckpointStore.inspect(stateDirectory);
+            System.out.println("Agent 检查点: " + (!checkpoint.present() ? "NONE" : checkpoint.completed() ? "COMPLETED" : "ACTIVE"));
+            if (checkpoint.present() && !checkpoint.completed()) {
+                System.out.println("检查点工作区: " + checkpoint.workspace());
+                System.out.println("检查点任务: " + checkpoint.task());
+                System.out.println("已完成模型轮次: " + checkpoint.completedRounds());
+                System.out.println("已完成工具调用: " + checkpoint.toolCalls());
+            }
         } catch (Exception e) {
             System.err.println("状态查询失败: " + e.getMessage()); System.exit(1);
         }

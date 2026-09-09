@@ -67,6 +67,7 @@ Linux/macOS：
 - 日检退出码 3：质量门禁失败；查看 `latest.json`、`latest-plan.json` 和 `latest-run.json`。
 - 日检退出码 4 或 5：构建失败或超时；查看状态目录中保存的完整构建日志。
 - 日检退出码 6：相同状态目录已有进程持锁，不要删除锁文件来绕过并发保护。
+- 带记忆 Agent 中断：运行 `--state-status <状态目录>`；若检查点为 `ACTIVE`，使用输出中的原任务重新执行 `--agent-ai-memory`，不要换任务覆盖。
 
 ## 升级与回滚
 

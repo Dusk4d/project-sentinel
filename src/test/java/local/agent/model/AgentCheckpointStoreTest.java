@@ -20,11 +20,24 @@ final class AgentCheckpointStoreTest {
                 List.of(new AgentToolTrace(1, "read", true)));
         store.save(value);
         assertEquals(value, store.load("检查启动方式").orElseThrow());
+        var active = AgentCheckpointStore.inspect(temporary.resolve("state"));
+        assertTrue(active.present());
+        assertFalse(active.completed());
+        assertEquals("检查启动方式", active.task());
+        assertEquals(1, active.completedRounds());
+        assertEquals(1, active.toolCalls());
         assertTrue(assertThrows(java.io.IOException.class, () -> store.load("另一个任务"))
                 .getMessage().contains("其他未完成"));
         store.markCompleted("检查启动方式");
         assertTrue(store.load("新任务").isEmpty());
+        assertTrue(AgentCheckpointStore.inspect(temporary.resolve("state")).completed());
         assertTrue(Files.readString(store.file()).contains("\"completed\":true"));
+    }
+
+    @Test void reportsAbsentCheckpointWithoutCreatingStateDirectory() throws Exception {
+        Path state = temporary.resolve("missing-state");
+        assertFalse(AgentCheckpointStore.inspect(state).present());
+        assertFalse(Files.exists(state));
     }
 
     @Test void rejectsCheckpointOwnedByAnotherWorkspace() throws Exception {
