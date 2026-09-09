@@ -32,6 +32,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class LocalWebServer implements AutoCloseable {
     private static final int MAX_WEB_PROJECTS = 200;
@@ -44,6 +45,8 @@ public final class LocalWebServer implements AutoCloseable {
     private final ExecutorService executor;
     private final ModelConfig modelConfig;
     private final Path agentStateDirectory;
+    private volatile ZipProjectUpload activeUpload;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     public LocalWebServer(Path workspace, int port) throws IOException {
         this(workspace, port, new ScanAdmissionGate(), ModelConfig.optionalFromEnvironment().orElse(null), null);
@@ -164,7 +167,8 @@ public final class LocalWebServer implements AutoCloseable {
         if (!method(exchange, "GET")) return;
         send(exchange, 200, "application/json; charset=utf-8",
                 "{\"status\":\"UP\",\"workspace\":" + JsonReportWriter.quote(workspace.toString())
-                        + ",\"projectCount\":" + projects.size() + ",\"projectsTruncated\":" + projectsTruncated
+                        + ",\"projectCount\":" + (projects.size() + (activeUpload == null ? 0 : 1))
+                        + ",\"projectsTruncated\":" + projectsTruncated
                         + ",\"scanBusy\":" + scanGate.busy() + ",\"modelEnabled\":" + (modelConfig != null)
                         + ",\"agentMemoryEnabled\":" + (agentStateDirectory != null) + "}\n");
     }
@@ -179,6 +183,13 @@ public final class LocalWebServer implements AutoCloseable {
             out.append("{\"id\":").append(JsonReportWriter.quote(projectId(project)))
                     .append(",\"name\":").append(JsonReportWriter.quote(project.getFileName().toString()))
                     .append(",\"path\":").append(JsonReportWriter.quote(project.toString())).append('}');
+        }
+        ZipProjectUpload upload = activeUpload;
+        if (upload != null) {
+            if (!projects.isEmpty()) out.append(',');
+            out.append("{\"id\":\"upload\",\"name\":")
+                    .append(JsonReportWriter.quote("ZIP: " + upload.projectRoot().getFileName()))
+                    .append(",\"temporary\":true}");
         }
         send(exchange, 200, "application/json; charset=utf-8",
                 out.append("],\"truncated\":").append(projectsTruncated)
@@ -241,14 +252,14 @@ public final class LocalWebServer implements AutoCloseable {
             send(exchange, 415, "application/json; charset=utf-8", "{\"error\":\"Content-Type must be text/plain\"}\n");
             return;
         }
-        Path project = selectedProject(exchange);
-        if (project == null) {
-            send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
-            return;
-        }
         var lease = scanGate.tryAcquire();
         if (lease == null) { busy(exchange); return; }
         try (lease) {
+            Path project = selectedProject(exchange);
+            if (project == null) {
+                send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
+                return;
+            }
             String question = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
             String json = new LocalRagService(new WorkspaceGuard(project)).ask(question).toJson();
             send(exchange, 200, "application/json; charset=utf-8", json);
@@ -275,14 +286,14 @@ public final class LocalWebServer implements AutoCloseable {
             send(exchange, 503, "application/json; charset=utf-8", "{\"error\":\"model enhancement is not configured\"}\n");
             return;
         }
-        Path project = selectedProject(exchange);
-        if (project == null) {
-            send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
-            return;
-        }
         var lease = scanGate.tryAcquire();
         if (lease == null) { busy(exchange); return; }
         try (lease) {
+            Path project = selectedProject(exchange);
+            if (project == null) {
+                send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
+                return;
+            }
             String question = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
             var local = new LocalRagService(new WorkspaceGuard(project));
             String json = new AiRagService(local, new OpenAiCompatibleClient(modelConfig)).ask(question).toJson();
@@ -310,17 +321,17 @@ public final class LocalWebServer implements AutoCloseable {
             send(exchange, 503, "application/json; charset=utf-8", "{\"error\":\"function calling model is not configured\"}\n");
             return;
         }
-        Path project = selectedProject(exchange);
-        if (project == null) {
-            send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
-            return;
-        }
         var lease = scanGate.tryAcquire();
         if (lease == null) { busy(exchange); return; }
         try (lease) {
+            Path project = selectedProject(exchange);
+            if (project == null) {
+                send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
+                return;
+            }
             String task = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
             var agent = new ToolCallingAgentService(new WorkspaceAgent(project), new OpenAiCompatibleClient(modelConfig));
-            if (agentStateDirectory == null) {
+            if (agentStateDirectory == null || isActiveUpload(project)) {
                 send(exchange, 200, "application/json; charset=utf-8", agent.run(task).toJson());
             } else {
                 Path state = agentStateDirectory.resolve(projectId(project));
@@ -361,7 +372,7 @@ public final class LocalWebServer implements AutoCloseable {
             send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
             return;
         }
-        if (agentStateDirectory == null) {
+        if (agentStateDirectory == null || isActiveUpload(project)) {
             send(exchange, 200, "application/json; charset=utf-8",
                     "{\"enabled\":false,\"memoryEntries\":0,\"checkpoint\":\"NONE\"}\n");
             return;
@@ -398,16 +409,23 @@ public final class LocalWebServer implements AutoCloseable {
         }
         var lease = scanGate.tryAcquire();
         if (lease == null) { busy(exchange); return; }
-        try (lease; var upload = ZipProjectUpload.extract(exchange.getRequestBody(), workspace,
-                parseContentLength(exchange.getRequestHeaders().getFirst("Content-Length")))) {
+        ZipProjectUpload upload = null;
+        try (lease) {
+            upload = ZipProjectUpload.extract(exchange.getRequestBody(), workspace,
+                    parseContentLength(exchange.getRequestHeaders().getFirst("Content-Length")));
             String json = new AnalysisBundleJsonWriter().render(new ProjectAnalyzer().analyze(upload.projectRoot()));
-            send(exchange, 200, "application/json; charset=utf-8", json);
+            replaceActiveUpload(upload);
+            upload = null;
+            send(exchange, 200, "application/json; charset=utf-8",
+                    "{\"projectId\":\"upload\",\"temporary\":true," + json.substring(1));
         } catch (ZipProjectUpload.UploadRejectedException rejected) {
             send(exchange, 413, "application/json; charset=utf-8",
                     "{\"error\":" + JsonReportWriter.quote(rejected.getMessage()) + "}\n");
         } catch (Exception e) {
             send(exchange, 500, "application/json; charset=utf-8",
                     "{\"error\":" + JsonReportWriter.quote(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "}\n");
+        } finally {
+            if (upload != null) upload.close();
         }
     }
 
@@ -430,7 +448,22 @@ public final class LocalWebServer implements AutoCloseable {
         String requested;
         try { requested = java.net.URLDecoder.decode(query.substring("project=".length()), StandardCharsets.UTF_8); }
         catch (IllegalArgumentException malformedEncoding) { return null; }
+        if (requested.equals("upload")) {
+            ZipProjectUpload upload = activeUpload;
+            return upload == null ? null : upload.projectRoot();
+        }
         return projects.stream().filter(path -> projectId(path).equals(requested)).findFirst().orElse(null);
+    }
+
+    private boolean isActiveUpload(Path project) {
+        ZipProjectUpload upload = activeUpload;
+        return upload != null && upload.projectRoot().equals(project);
+    }
+
+    private synchronized void replaceActiveUpload(ZipProjectUpload replacement) throws IOException {
+        ZipProjectUpload previous = activeUpload;
+        if (previous != null) previous.close();
+        activeUpload = replacement;
     }
 
     private String projectId(Path project) {
@@ -471,8 +504,15 @@ public final class LocalWebServer implements AutoCloseable {
     }
 
     @Override public void close() {
+        if (!closed.compareAndSet(false, true)) return;
         server.stop(0);
         executor.close();
+        ZipProjectUpload upload = activeUpload;
+        activeUpload = null;
+        if (upload != null) {
+            try { upload.close(); }
+            catch (IOException ignored) { }
+        }
     }
 
     private static final String HTML = """
@@ -521,5 +561,7 @@ public final class LocalWebServer implements AutoCloseable {
             .replace("b.disabled=true;b.textContent='上传检测中…';try{const r=await fetch('/api/upload-analysis'",
                     "b.disabled=true;b.textContent='上传检测中…';status.textContent='正在上传并检测 '+file.name+'…';try{const r=await fetch('/api/upload-analysis'")
             .replace("if(!r.ok)throw Error(bundle.error||'上传检测失败');render(bundle)}catch(e){showError(e)}finally{b.disabled=false;b.textContent='上传 ZIP 检测';$('zip').value=''}}",
-                    "if(!r.ok)throw Error(bundle.error||'上传检测失败');render(bundle);status.textContent='检测完成：'+file.name}catch(e){status.textContent='检测失败：'+e.message;status.classList.add('error');showError(e)}finally{b.disabled=false;b.textContent='上传 ZIP 检测'}}");
+                    "if(!r.ok)throw Error(bundle.error||'上传检测失败');render(bundle);status.textContent='检测完成：'+file.name}catch(e){status.textContent='检测失败：'+e.message;status.classList.add('error');showError(e)}finally{b.disabled=false;b.textContent='上传 ZIP 检测'}}")
+            .replace("render(bundle);status.textContent='检测完成：'+file.name",
+                    "render(bundle);let option=[...$('projects').options].find(x=>x.value===bundle.projectId);if(!option){option=document.createElement('option');$('projects').append(option)}option.value=bundle.projectId;option.textContent='ZIP: '+file.name;$('projects').value=bundle.projectId;await refreshAgentState();status.textContent='检测完成：'+file.name+'；智能助手已切换到此 ZIP。'");
 }

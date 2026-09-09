@@ -461,6 +461,7 @@ public final class Main {
     private static void runServer(Path project, int port, Path stateDirectory) {
         try (var server = stateDirectory == null ? new LocalWebServer(project, port)
                 : new LocalWebServer(project, port, stateDirectory)) {
+            Runtime.getRuntime().addShutdownHook(new Thread(server::close, "project-sentinel-shutdown"));
             server.start();
             System.out.println("Project Sentinel 本地服务已启动: " + server.url());
             System.out.println("按 Ctrl+C 停止。服务仅监听本机回环地址。");

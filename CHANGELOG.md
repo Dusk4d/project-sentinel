@@ -7,6 +7,7 @@
 ### Added
 
 - Web ZIP 上传在按钮附近实时显示上传、完成与失败状态，并允许失败后重新选择同一文件。
+- ZIP 检测成功后自动切换为临时项目，支持重新扫描、本地/模型 RAG 和无状态 Function Calling Agent，替换上传或关闭服务时自动清理。
 
 - 构建生成可复现 CycloneDX 1.6 JSON SBOM，并随 ZIP、CI 制品和正式 Release 分发。
 - 标签发布为 ZIP、校验文件和 SBOM 生成可验证的 SLSA 来源证明，并把 CycloneDX SBOM 作为 ZIP 的签名证明关联到 GitHub。

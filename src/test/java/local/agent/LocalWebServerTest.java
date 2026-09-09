@@ -126,4 +126,11 @@ final class LocalWebServerTest {
             assertTrue(health.body().contains("\"agentMemoryEnabled\":true"));
         }
     }
+
+    @Test void closeIsIdempotentForShutdownHookAndTryWithResources() throws Exception {
+        var server = new LocalWebServer(project, 0);
+        server.start();
+        server.close();
+        assertDoesNotThrow(server::close);
+    }
 }

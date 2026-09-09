@@ -12,12 +12,15 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -70,6 +73,36 @@ final class WebAgentTest {
             assertTrue(response.body().contains("id=\"agent-state\""));
             assertTrue(response.body().contains("/api/agent-state"));
         }
+    }
+
+    @Test void executesAgentToolsAgainstUploadedZip() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "host", StandardCharsets.UTF_8);
+        var model = scriptedModel(List.of(
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"zip_1\",\"type\":\"function\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"input\\\":\\\"README.md\\\"}\"}}]}}]}",
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ZIP 项目通过 upload-entry 启动。\"}}]}"));
+        var config = new ModelConfig(URI.create("http://127.0.0.1:" + model.getAddress().getPort() + "/chat/completions"),
+                "test", "", Duration.ofSeconds(3));
+        try (var web = new LocalWebServer(workspace, 0, config); var client = HttpClient.newHttpClient()) {
+            web.start();
+            byte[] archive;
+            try (var bytes = new ByteArrayOutputStream(); var zip = new ZipOutputStream(bytes)) {
+                zip.putNextEntry(new ZipEntry("uploaded/README.md"));
+                zip.write("使用 upload-entry 启动。".getBytes(StandardCharsets.UTF_8));
+                zip.closeEntry();
+                zip.finish();
+                archive = bytes.toByteArray();
+            }
+            var uploaded = client.send(HttpRequest.newBuilder(URI.create(web.url() + "api/upload-analysis"))
+                            .header("Content-Type", "application/zip")
+                            .POST(HttpRequest.BodyPublishers.ofByteArray(archive)).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, uploaded.statusCode());
+
+            var response = post(client, web.url() + "api/agent-ai?project=upload", "分析上传项目的启动方式");
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("upload-entry"));
+            assertTrue(response.body().contains("\"toolCalls\":1"));
+        } finally { model.stop(0); }
     }
 
     @Test void persistsWebAgentMemoryAndCompletedCheckpointWhenStateIsConfigured() throws Exception {

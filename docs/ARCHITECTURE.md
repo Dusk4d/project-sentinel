@@ -43,13 +43,15 @@ ZIP 上传使用独立的 `ZipProjectUpload` 边界：请求体、条目数、�
 
 `ScanAdmissionGate` 为 Web 报告与组合分析共享单个公平许可。并发扫描不会排队占用虚拟线程和重复冲击磁盘，而是返回带重试提示的 429；轻量健康检查和项目目录不经过该许可。
 
-`/api/rag` 将页面问题交给同一个 `LocalRagService`，只允许查询启动时发现的项目，并与其他磁盘扫描共享准入许可。浏览器端用文本节点展示回答和证据，项目内容不会作为 HTML 注入页面。
+`/api/rag` 将页面问题交给同一个 `LocalRagService`，只允许查询启动时发现的项目或当前受控 ZIP 临时项目，并与其他磁盘扫描共享准入许可。浏览器端用文本节点展示回答和证据，项目内容不会作为 HTML 注入页面。
 
 当进程环境提供完整模型配置时，Web 额外启用 `/api/rag-ai`。能力状态只以布尔值暴露；请求仍先通过项目白名单、本地检索和扫描准入，再进入 `AiRagService`。普通 `/api/rag` 始终保留，确保模型不是健康检查和问答的强依赖。
 
 `/api/agent-ai` 将 Web 任务交给与 CLI 相同的 `ToolCallingAgentService` 和 `WorkspaceAgent`。浏览器只提交任务与已签发项目 ID，不能指定工具实现或文件系统根；整个工具循环占用共享准入许可，并返回版本化回答及轮次、调用次数。结果同步记录调用顺序、工具名与成功状态，CLI 和 Web 均可审计，同时不在轨迹中复制工具输出。
 
 Web 服务可选接受一个显式 Agent 状态根目录。启用后按项目不透明 ID 建立隔离子目录，并在共享准入许可内复用 `StateRunLock`、`AgentMemoryStore` 与 `AgentCheckpointStore`；默认不提供状态目录时仍为无状态模式。只读 `/api/agent-state` 返回记忆计数和枚举检查点状态，不泄露状态目录、任务或回答。
+
+ZIP 检测成功后，服务把唯一活动上传注册为临时项目 ID `upload`，前端自动选择它，分析、RAG 和 Function Calling 共享同一 `WorkspaceGuard`。新上传替换并清理旧副本，服务关闭时清理当前副本。临时 ZIP Agent 强制无状态，避免短生命周期路径产生孤立持久记忆。
 
 `AtomicTextStore` 统一稳定输出文件的写入语义。每日运行只替换 Agent 状态目录内的 `latest.html` 和 `latest.json`，时间戳 Markdown 与 TSV 历史仅追加，不执行自动清理。
 

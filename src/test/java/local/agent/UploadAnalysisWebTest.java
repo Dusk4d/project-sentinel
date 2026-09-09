@@ -32,9 +32,23 @@ final class UploadAnalysisWebTest {
                     .POST(HttpRequest.BodyPublishers.ofByteArray(archive)).build();
             var response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("\"projectId\":\"upload\""));
+            assertTrue(response.body().contains("\"temporary\":true"));
             assertTrue(response.body().contains("\"project\": \"uploaded\""));
             assertTrue(response.body().contains("\"sources\": 1"));
             assertTrue(response.body().contains("\"tests\": 1"));
+
+            var rag = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/rag?project=upload"))
+                            .header("Content-Type", "text/plain; charset=utf-8")
+                            .POST(HttpRequest.BodyPublishers.ofString("Uploaded project documentation", StandardCharsets.UTF_8)).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, rag.statusCode());
+            assertTrue(rag.body().contains("Uploaded project documentation"));
+
+            var catalog = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/projects")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertTrue(catalog.body().contains("\"id\":\"upload\""));
+            assertTrue(catalog.body().contains("\"temporary\":true"));
         }
         try (var children = Files.list(workspace)) {
             assertFalse(children.anyMatch(path -> path.getFileName().toString().startsWith(".sentinel-upload-")));
