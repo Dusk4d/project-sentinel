@@ -7,9 +7,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import local.agent.config.AnalyzerConfig;
@@ -23,6 +27,8 @@ public final class ProjectAnalyzer {
     private static final List<String> BUILD_MANIFEST_NAMES = List.of("pom.xml", "build.gradle", "build.gradle.kts",
             "package.json", "pyproject.toml", "Cargo.toml", "go.mod");
     private static final Pattern ACTION_MARKER = Pattern.compile("(?:^|\\s)(?://|#|/\\*|\\*)\\s*(TODO|FIXME|HACK)\\b", Pattern.CASE_INSENSITIVE);
+    private final Map<Path, CachedTodoScan> todoCache = new HashMap<>();
+    private long todoFilesRead;
 
     public ProjectProfile analyze(Path root) throws IOException {
         if (!Files.isDirectory(root)) throw new IOException("项目目录不存在: " + root.toAbsolutePath().normalize());
@@ -151,29 +157,46 @@ public final class ProjectAnalyzer {
         return value.contains("/test/") || value.contains("/tests/") || name.contains("test") || name.contains("spec");
     }
 
-    private TodoScan scanTodos(Path root, List<Path> files, AnalyzerConfig config) {
+    private synchronized TodoScan scanTodos(Path root, List<Path> files, AnalyzerConfig config) {
         int count = 0;
         var locations = new ArrayList<String>();
+        var seen = new HashSet<Path>();
         for (Path file : files) {
             try {
                 if (!isSource(file) || Files.size(file) > config.maxTextBytes()) continue;
-                var lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-                for (int index = 0; index < lines.size(); index++) {
-                    if (ACTION_MARKER.matcher(lines.get(index)).find()) {
-                        count++;
-                        if (locations.size() < 10) locations.add(root.relativize(file).toString().replace('\\', '/') + ":" + (index + 1));
-                    }
+                Path real = file.toRealPath();
+                seen.add(real);
+                BasicFileAttributes attributes = Files.readAttributes(real, BasicFileAttributes.class);
+                FileStamp stamp = new FileStamp(attributes.size(), attributes.lastModifiedTime(), config.maxTextBytes());
+                CachedTodoScan cached = todoCache.get(real);
+                if (cached == null || !cached.stamp().equals(stamp)) {
+                    var lineNumbers = new ArrayList<Integer>();
+                    List<String> lines = Files.readAllLines(real, StandardCharsets.UTF_8);
+                    for (int index = 0; index < lines.size(); index++)
+                        if (ACTION_MARKER.matcher(lines.get(index)).find()) lineNumbers.add(index + 1);
+                    cached = new CachedTodoScan(stamp, List.copyOf(lineNumbers));
+                    todoCache.put(real, cached);
+                    todoFilesRead++;
                 }
+                count += cached.lineNumbers().size();
+                String relative = root.relativize(real).toString().replace('\\', '/');
+                for (int line : cached.lineNumbers())
+                    if (locations.size() < 10) locations.add(relative + ":" + line);
             } catch (IOException ignored) { }
         }
+        todoCache.keySet().removeIf(path -> path.startsWith(root) && !seen.contains(path));
         return new TodoScan(count, List.copyOf(locations));
     }
+
+    long todoFilesRead() { return todoFilesRead; }
 
     private String evidenceLocations(List<String> locations) {
         return locations.isEmpty() ? "" : "，位置示例 " + locations;
     }
 
     private record TodoScan(int count, List<String> locations) { }
+    private record FileStamp(long size, FileTime modified, long maxTextBytes) { }
+    private record CachedTodoScan(FileStamp stamp, List<Integer> lineNumbers) { }
 
     private String detectEcosystem(Path root) {
         if (Files.exists(root.resolve("pom.xml"))) return "Java / Maven";

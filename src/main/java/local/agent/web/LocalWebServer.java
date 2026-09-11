@@ -46,6 +46,7 @@ public final class LocalWebServer implements AutoCloseable {
     private final ExecutorService executor;
     private final ModelConfig modelConfig;
     private final Path agentStateDirectory;
+    private final ProjectAnalyzer analyzer = new ProjectAnalyzer();
     private final ConcurrentHashMap<Path, LocalRagService> ragServices = new ConcurrentHashMap<>();
     private volatile ZipProjectUpload activeUpload;
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -213,7 +214,7 @@ public final class LocalWebServer implements AutoCloseable {
                 send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
                 return;
             }
-            String json = new JsonReportWriter().render(new ProjectAnalyzer().analyze(project));
+            String json = new JsonReportWriter().render(analyzer.analyze(project));
             send(exchange, 200, "application/json; charset=utf-8", json);
         } catch (Exception e) {
             send(exchange, 500, "application/json; charset=utf-8",
@@ -233,7 +234,7 @@ public final class LocalWebServer implements AutoCloseable {
                 send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
                 return;
             }
-            String json = new AnalysisBundleJsonWriter().render(new ProjectAnalyzer().analyze(project));
+            String json = new AnalysisBundleJsonWriter().render(analyzer.analyze(project));
             send(exchange, 200, "application/json; charset=utf-8", json);
         } catch (Exception e) {
             send(exchange, 500, "application/json; charset=utf-8",
@@ -442,7 +443,7 @@ public final class LocalWebServer implements AutoCloseable {
         try (lease) {
             upload = ZipProjectUpload.extract(exchange.getRequestBody(), workspace,
                     parseContentLength(exchange.getRequestHeaders().getFirst("Content-Length")));
-            String json = new AnalysisBundleJsonWriter().render(new ProjectAnalyzer().analyze(upload.projectRoot()));
+            String json = new AnalysisBundleJsonWriter().render(analyzer.analyze(upload.projectRoot()));
             replaceActiveUpload(upload);
             upload = null;
             send(exchange, 200, "application/json; charset=utf-8",
