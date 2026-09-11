@@ -29,7 +29,9 @@ public final class LocalRagService {
     private static final Set<String> TEXT_NAMES = Set.of("readme", "license", "dockerfile", "makefile", "pom.xml", "build.gradle", "settings.gradle", "package.json", "pyproject.toml", "cargo.toml", "go.mod");
     private static final Set<String> TEXT_EXTENSIONS = Set.of(".md", ".txt", ".adoc", ".rst", ".java", ".kt", ".py", ".js", ".jsx", ".ts", ".tsx", ".vue", ".svelte", ".go", ".rs", ".c", ".cpp", ".h", ".cs", ".rb", ".php", ".xml", ".json", ".yml", ".yaml", ".toml", ".properties", ".gradle", ".sh", ".ps1");
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[\\p{IsHan}]+|[\\p{L}\\p{N}_]+", Pattern.UNICODE_CHARACTER_CLASS);
-    private static final Set<String> QUERY_STOP_TERMS = Set.of("这", "个", "的", "了", "吗", "呢", "是", "什", "么", "哪些", "什么", "这个", "一下", "请问", "tell", "me", "the", "a", "an", "of", "is", "what");
+    private static final Set<String> QUERY_STOP_TERMS = Set.of("这", "个", "的", "了", "吗", "呢", "是", "什", "么", "哪些", "什么", "这个", "一下", "请问",
+            "如", "何", "如何", "怎么", "在哪", "哪里", "是否", "有没有", "作用", "功能", "存在", "实现",
+            "tell", "me", "the", "a", "an", "of", "is", "what", "how", "where");
     private final WorkspaceGuard guard;
     private final Map<Path, CachedFile> fileCache = new HashMap<>();
     private long indexedFiles;
@@ -42,6 +44,7 @@ public final class LocalRagService {
         IndexSnapshot snapshot = index();
         List<Chunk> chunks = snapshot.chunks();
         QueryIntent intent = QueryIntent.classify(query);
+        List<String> signalTerms = signalTerms(query);
         List<String> queryTerms = queryTerms(query, intent);
         if (queryTerms.isEmpty() || chunks.isEmpty()) return noEvidence(query, snapshot);
 
@@ -53,7 +56,7 @@ public final class LocalRagService {
         List<ScoredChunk> ranked = chunks.stream()
                 .map(chunk -> new ScoredChunk(chunk, score(chunk, queryTerms, documentFrequency,
                         chunks.size(), averageLength, intent)))
-                .filter(scored -> scored.score() > 0.0)
+                .filter(scored -> scored.score() > 0.0 && relevant(scored.chunk(), signalTerms, intent))
                 .sorted(Comparator.comparingDouble(ScoredChunk::score).reversed()
                         .thenComparing(scored -> scored.chunk().path()).thenComparingInt(scored -> scored.chunk().startLine()))
                 .toList();
@@ -167,6 +170,20 @@ public final class LocalRagService {
         var terms = new ArrayList<>(tokens(query).stream().filter(term -> !QUERY_STOP_TERMS.contains(term)).toList());
         terms.addAll(tokens(intent.expansion));
         return terms.stream().distinct().toList();
+    }
+
+    private List<String> signalTerms(String query) {
+        return tokens(query).stream()
+                .filter(term -> !QUERY_STOP_TERMS.contains(term))
+                .filter(term -> term.codePointCount(0, term.length()) >= 2)
+                .distinct().toList();
+    }
+
+    private boolean relevant(Chunk chunk, List<String> signalTerms, QueryIntent intent) {
+        if (intent != QueryIntent.GENERAL) return true;
+        if (signalTerms.isEmpty()) return false;
+        Set<String> terms = new HashSet<>(chunk.terms());
+        return signalTerms.stream().anyMatch(terms::contains);
     }
 
     private List<RagHit> diverseHits(List<ScoredChunk> ranked) {

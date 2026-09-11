@@ -66,6 +66,27 @@ final class LocalRagServiceTest {
         assertEquals("PaymentService.java", answer.evidence().get(0).path());
     }
 
+    @Test void refusesUnrelatedQuestionInsteadOfReturningWeakCharacterOverlap() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "# 项目说明\n如何启动服务：运行 start-web.cmd。\n支持项目健康检查。\n");
+
+        String unrelated = String.join("", "如", "何", "烹", "饪", "番", "茄", "炒", "蛋", "？");
+        var answer = new LocalRagService(new WorkspaceGuard(workspace)).ask(unrelated);
+
+        assertTrue(answer.evidence().isEmpty());
+        assertTrue(answer.answer().contains("没有找到足以支持回答"));
+    }
+
+    @Test void keepsRelevantTwoCharacterChineseTerm() throws Exception {
+        String fixture = String.join("", "项目使用本地", "缓", "存", "减少重复扫描。\n");
+        Files.writeString(workspace.resolve("README.md"), fixture);
+
+        String question = String.join("", "缓", "存", "在", "哪", "里", "实", "现", "？");
+        var answer = new LocalRagService(new WorkspaceGuard(workspace)).ask(question);
+
+        assertFalse(answer.evidence().isEmpty());
+        assertEquals("README.md", answer.evidence().get(0).path());
+    }
+
     @Test void reusesUnchangedChunksAndInvalidatesChangedOrDeletedFiles() throws Exception {
         Path readme = workspace.resolve("README.md");
         Files.writeString(readme, "alphaFeature 项目说明\n");
