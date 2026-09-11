@@ -17,6 +17,7 @@ final class AiRagResultTest {
         assertTrue(json.contains("\"answer\": \"模型 [回答]\""));
         assertTrue(json.contains("\"evidence\": [\n    {\"path\":\"src/[demo].java\""));
         assertTrue(json.contains("line \\\"one\\\"\\nline two"));
-        assertTrue(json.endsWith("]\n}\n"));
+        assertTrue(json.contains("\"indexTruncated\": false"));
+        assertTrue(json.endsWith("\"indexTruncated\": false\n}\n"));
     }
 }

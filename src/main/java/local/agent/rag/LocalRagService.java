@@ -39,10 +39,11 @@ public final class LocalRagService {
     public RagAnswer ask(String question) throws IOException {
         String query = question == null ? "" : question.strip();
         if (query.isEmpty()) throw new IllegalArgumentException("RAG 问题不能为空");
-        List<Chunk> chunks = index();
+        IndexSnapshot snapshot = index();
+        List<Chunk> chunks = snapshot.chunks();
         QueryIntent intent = QueryIntent.classify(query);
         List<String> queryTerms = queryTerms(query, intent);
-        if (queryTerms.isEmpty() || chunks.isEmpty()) return noEvidence(query);
+        if (queryTerms.isEmpty() || chunks.isEmpty()) return noEvidence(query, snapshot);
 
         Map<String, Integer> documentFrequency = new HashMap<>();
         for (Chunk chunk : chunks) {
@@ -57,14 +58,19 @@ public final class LocalRagService {
                         .thenComparing(scored -> scored.chunk().path()).thenComparingInt(scored -> scored.chunk().startLine()))
                 .toList();
         List<RagHit> hits = diverseHits(ranked);
-        if (hits.isEmpty()) return noEvidence(query);
+        if (hits.isEmpty()) return noEvidence(query, snapshot);
         String extract = cleanExcerpt(hits.get(0).text());
         if (extract.length() > 360) extract = extract.substring(0, 357) + "...";
-        return new RagAnswer(1, query, "最相关的本地证据是：" + extract + "（请结合下方来源核验。）", hits);
+        return answer(query, "最相关的本地证据是：" + extract + "（请结合下方来源核验。）", hits, snapshot);
     }
 
-    private RagAnswer noEvidence(String query) {
-        return new RagAnswer(1, query, "没有找到足以支持回答的本地证据。", List.of());
+    private RagAnswer noEvidence(String query, IndexSnapshot snapshot) {
+        return answer(query, "没有找到足以支持回答的本地证据。", List.of(), snapshot);
+    }
+
+    private RagAnswer answer(String query, String text, List<RagHit> hits, IndexSnapshot snapshot) {
+        if (snapshot.truncated()) text += " 注意：RAG 索引已达到安全上限，结果可能不完整。";
+        return new RagAnswer(1, query, text, hits, snapshot.files(), snapshot.chunks().size(), snapshot.truncated());
     }
 
     private String cleanExcerpt(String text) {
@@ -75,10 +81,11 @@ public final class LocalRagService {
                 .replaceAll("\\s+", " ").strip();
     }
 
-    private synchronized List<Chunk> index() throws IOException {
+    private synchronized IndexSnapshot index() throws IOException {
         var chunks = new ArrayList<Chunk>();
         var seen = new HashSet<Path>();
         int[] files = {0};
+        boolean[] truncated = {false};
         Files.walkFileTree(guard.root(), new SimpleFileVisitor<>() {
             @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                 if (!dir.equals(guard.root()) && IGNORED_DIRECTORIES.contains(dir.getFileName().toString().toLowerCase(Locale.ROOT)))
@@ -86,8 +93,11 @@ public final class LocalRagService {
                 return FileVisitResult.CONTINUE;
             }
             @Override public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (files[0] >= MAX_FILES || chunks.size() >= MAX_CHUNKS) return FileVisitResult.TERMINATE;
                 if (!safeTextFile(file)) return FileVisitResult.CONTINUE;
+                if (files[0] >= MAX_FILES) {
+                    truncated[0] = true;
+                    return FileVisitResult.TERMINATE;
+                }
                 files[0]++;
                 try {
                     Path real = file.toRealPath();
@@ -100,14 +110,15 @@ public final class LocalRagService {
                         indexedFiles++;
                     }
                     int remaining = MAX_CHUNKS - chunks.size();
+                    if (cached.chunks().size() > remaining) truncated[0] = true;
                     chunks.addAll(cached.chunks().subList(0, Math.min(remaining, cached.chunks().size())));
                 } catch (IOException ignored) { }
-                return chunks.size() >= MAX_CHUNKS ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+                return truncated[0] ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
             }
             @Override public FileVisitResult visitFileFailed(Path file, IOException exc) { return FileVisitResult.CONTINUE; }
         });
         fileCache.keySet().retainAll(seen);
-        return List.copyOf(chunks);
+        return new IndexSnapshot(List.copyOf(chunks), files[0], truncated[0]);
     }
 
     long indexedFiles() { return indexedFiles; }
@@ -223,6 +234,7 @@ public final class LocalRagService {
                 else if (path.endsWith("vision.md")) adjusted += 9.0;
                 else if (path.endsWith("architecture.md")) adjusted += 5.0;
                 else if (isBuildManifest(path)) adjusted += 2.0;
+                else adjusted *= 0.25;
                 if (text.contains("## 目录") || occurrences(text, "](#") >= 3) adjusted *= 0.35;
                 if (path.startsWith("interview-prep/") || path.startsWith("tmp/") || path.startsWith("reports/")) adjusted *= 0.2;
             } else if (this == STARTUP) {
@@ -266,4 +278,5 @@ public final class LocalRagService {
     private record ScoredChunk(Chunk chunk, double score) { }
     private record FileStamp(long size, java.nio.file.attribute.FileTime modifiedTime) { }
     private record CachedFile(FileStamp stamp, List<Chunk> chunks) { }
+    private record IndexSnapshot(List<Chunk> chunks, int files, boolean truncated) { }
 }

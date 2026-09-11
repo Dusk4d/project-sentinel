@@ -31,6 +31,8 @@ public record AiRagResult(String answer, boolean modelUsed, String notice, RagAn
                     .append(",\"text\":").append(JsonReportWriter.quote(hit.text())).append('}');
         }
         if (!retrieval.evidence().isEmpty()) out.append('\n').append("  ");
-        return out.append("]\n}\n").toString();
+        return out.append("],\n  \"indexedFiles\": ").append(retrieval.indexedFiles())
+                .append(",\n  \"indexedChunks\": ").append(retrieval.indexedChunks())
+                .append(",\n  \"indexTruncated\": ").append(retrieval.indexTruncated()).append("\n}\n").toString();
     }
 }

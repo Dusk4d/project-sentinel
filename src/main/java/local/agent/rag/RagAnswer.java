@@ -4,7 +4,11 @@ import local.agent.report.JsonReportWriter;
 
 import java.util.List;
 
-public record RagAnswer(int schemaVersion, String question, String answer, List<RagHit> evidence) {
+public record RagAnswer(int schemaVersion, String question, String answer, List<RagHit> evidence,
+                        int indexedFiles, int indexedChunks, boolean indexTruncated) {
+    public RagAnswer(int schemaVersion, String question, String answer, List<RagHit> evidence) {
+        this(schemaVersion, question, answer, evidence, 0, 0, false);
+    }
     public String renderText() {
         var out = new StringBuilder("# 本地 RAG 回答（抽取式）\n\n")
                 .append(answer).append("\n\n## 检索证据\n");
@@ -33,6 +37,8 @@ public record RagAnswer(int schemaVersion, String question, String answer, List<
                     .append(",\"text\":").append(JsonReportWriter.quote(hit.text())).append('}');
         }
         if (!evidence.isEmpty()) out.append('\n').append("  ");
-        return out.append("]\n}\n").toString();
+        return out.append("],\n  \"indexedFiles\": ").append(indexedFiles)
+                .append(",\n  \"indexedChunks\": ").append(indexedChunks)
+                .append(",\n  \"indexTruncated\": ").append(indexTruncated).append("\n}\n").toString();
     }
 }

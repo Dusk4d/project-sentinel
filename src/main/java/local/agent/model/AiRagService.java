@@ -36,6 +36,7 @@ public final class AiRagService {
 
     private String prompt(String question, RagAnswer answer) {
         var out = new StringBuilder("问题：").append(question).append("\n\n本地检索证据：\n");
+        if (answer.indexTruncated()) out.append("警告：本地索引达到安全上限，以下证据可能不完整；不要把未命中表述为项目中不存在。\n");
         for (RagHit hit : answer.evidence()) out.append("--- BEGIN EVIDENCE ")
                 .append(hit.path()).append(':').append(hit.startLine()).append('-').append(hit.endLine())
                 .append(" ---\n").append(hit.text()).append("\n--- END EVIDENCE ---\n");

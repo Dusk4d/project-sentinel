@@ -44,6 +44,8 @@ final class LocalRagServiceTest {
         Path interview = Files.createDirectories(workspace.resolve("interview-prep"));
         Files.writeString(interview.resolve("高频问答.md"), "项目主要功能是什么？回答时先讲项目，再讲功能。\n".repeat(20));
         Files.writeString(workspace.resolve("Service.java"), "class Service { void projectFunction() {} }\n");
+        Files.writeString(workspace.resolve("IntentClassifier.java"),
+                "String overview = \"主要功能 核心功能 项目是什么 做什么 项目介绍 项目简介 overview purpose readme 简介 定位 目标\";\n".repeat(8));
 
         var answer = new LocalRagService(new WorkspaceGuard(workspace)).ask("这个项目主要功能是什么？");
 
@@ -81,5 +83,20 @@ final class LocalRagServiceTest {
 
         Files.delete(readme);
         assertTrue(rag.ask("betaFeature").evidence().isEmpty(), "已删除文件不得残留在索引中");
+    }
+
+    @Test void reportsFileLimitOnlyAfterConfirmingAdditionalIndexableFile() throws Exception {
+        for (int index = 0; index < 1_000; index++)
+            Files.writeString(workspace.resolve("doc-" + index + ".md"), "sharedEvidence");
+        var exact = new LocalRagService(new WorkspaceGuard(workspace)).ask("sharedEvidence");
+        assertEquals(1_000, exact.indexedFiles());
+        assertFalse(exact.indexTruncated(), "恰好达到文件上限不应误报截断");
+
+        Files.writeString(workspace.resolve("overflow.md"), "sharedEvidence");
+        var overflow = new LocalRagService(new WorkspaceGuard(workspace)).ask("sharedEvidence");
+        assertEquals(1_000, overflow.indexedFiles());
+        assertTrue(overflow.indexTruncated());
+        assertTrue(overflow.answer().contains("结果可能不完整"));
+        assertTrue(overflow.toJson().contains("\"indexTruncated\": true"));
     }
 }
