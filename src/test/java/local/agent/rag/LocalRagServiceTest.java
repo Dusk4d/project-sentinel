@@ -63,4 +63,23 @@ final class LocalRagServiceTest {
 
         assertEquals("PaymentService.java", answer.evidence().get(0).path());
     }
+
+    @Test void reusesUnchangedChunksAndInvalidatesChangedOrDeletedFiles() throws Exception {
+        Path readme = workspace.resolve("README.md");
+        Files.writeString(readme, "alphaFeature 项目说明\n");
+        var rag = new LocalRagService(new WorkspaceGuard(workspace));
+
+        assertFalse(rag.ask("alphaFeature").evidence().isEmpty());
+        long firstBuild = rag.indexedFiles();
+        assertEquals(1, firstBuild);
+        assertFalse(rag.ask("alphaFeature").evidence().isEmpty());
+        assertEquals(firstBuild, rag.indexedFiles(), "未变化文件不得重复读取和分块");
+
+        Files.writeString(readme, "betaFeature 已更新项目说明，长度不同\n");
+        assertFalse(rag.ask("betaFeature").evidence().isEmpty());
+        assertEquals(firstBuild + 1, rag.indexedFiles(), "变化文件必须重建分块");
+
+        Files.delete(readme);
+        assertTrue(rag.ask("betaFeature").evidence().isEmpty(), "已删除文件不得残留在索引中");
+    }
 }

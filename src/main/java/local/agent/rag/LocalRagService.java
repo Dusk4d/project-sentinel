@@ -31,6 +31,8 @@ public final class LocalRagService {
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[\\p{IsHan}]+|[\\p{L}\\p{N}_]+", Pattern.UNICODE_CHARACTER_CLASS);
     private static final Set<String> QUERY_STOP_TERMS = Set.of("这", "个", "的", "了", "吗", "呢", "是", "什", "么", "哪些", "什么", "这个", "一下", "请问", "tell", "me", "the", "a", "an", "of", "is", "what");
     private final WorkspaceGuard guard;
+    private final Map<Path, CachedFile> fileCache = new HashMap<>();
+    private long indexedFiles;
 
     public LocalRagService(WorkspaceGuard guard) { this.guard = guard; }
 
@@ -73,8 +75,9 @@ public final class LocalRagService {
                 .replaceAll("\\s+", " ").strip();
     }
 
-    private List<Chunk> index() throws IOException {
+    private synchronized List<Chunk> index() throws IOException {
         var chunks = new ArrayList<Chunk>();
+        var seen = new HashSet<Path>();
         int[] files = {0};
         Files.walkFileTree(guard.root(), new SimpleFileVisitor<>() {
             @Override public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
@@ -86,13 +89,28 @@ public final class LocalRagService {
                 if (files[0] >= MAX_FILES || chunks.size() >= MAX_CHUNKS) return FileVisitResult.TERMINATE;
                 if (!safeTextFile(file)) return FileVisitResult.CONTINUE;
                 files[0]++;
-                addChunks(file, chunks);
+                try {
+                    Path real = file.toRealPath();
+                    seen.add(real);
+                    FileStamp stamp = new FileStamp(attrs.size(), attrs.lastModifiedTime());
+                    CachedFile cached = fileCache.get(real);
+                    if (cached == null || !cached.stamp().equals(stamp)) {
+                        cached = new CachedFile(stamp, chunksFor(real));
+                        fileCache.put(real, cached);
+                        indexedFiles++;
+                    }
+                    int remaining = MAX_CHUNKS - chunks.size();
+                    chunks.addAll(cached.chunks().subList(0, Math.min(remaining, cached.chunks().size())));
+                } catch (IOException ignored) { }
                 return chunks.size() >= MAX_CHUNKS ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
             }
             @Override public FileVisitResult visitFileFailed(Path file, IOException exc) { return FileVisitResult.CONTINUE; }
         });
+        fileCache.keySet().retainAll(seen);
         return List.copyOf(chunks);
     }
+
+    long indexedFiles() { return indexedFiles; }
 
     private boolean safeTextFile(Path file) {
         try {
@@ -104,7 +122,8 @@ public final class LocalRagService {
         } catch (IOException ignored) { return false; }
     }
 
-    private void addChunks(Path file, List<Chunk> chunks) {
+    private List<Chunk> chunksFor(Path file) {
+        var chunks = new ArrayList<Chunk>();
         try {
             List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
             String relative = guard.root().relativize(file.toRealPath()).toString().replace('\\', '/');
@@ -115,6 +134,7 @@ public final class LocalRagService {
                 if (end == lines.size()) break;
             }
         } catch (IOException ignored) { }
+        return List.copyOf(chunks);
     }
 
     private double score(Chunk chunk, List<String> query, Map<String, Integer> df, int documents,
@@ -244,4 +264,6 @@ public final class LocalRagService {
 
     private record Chunk(String path, int startLine, int endLine, String text, List<String> terms) { }
     private record ScoredChunk(Chunk chunk, double score) { }
+    private record FileStamp(long size, java.nio.file.attribute.FileTime modifiedTime) { }
+    private record CachedFile(FileStamp stamp, List<Chunk> chunks) { }
 }

@@ -53,4 +53,25 @@ final class RagWebTest {
             assertEquals(413, oversized.statusCode());
         }
     }
+
+    @Test void reflectsFileChangesAcrossRequestsWithReusedWebIndex() throws Exception {
+        Path readme = workspace.resolve("README.md");
+        Files.writeString(readme, "alphaFeature 初始说明");
+        try (var server = new LocalWebServer(workspace, 0); var client = HttpClient.newHttpClient()) {
+            server.start();
+            URI endpoint = URI.create(server.url() + "api/rag");
+            var first = client.send(HttpRequest.newBuilder(endpoint).header("Content-Type", "text/plain")
+                            .POST(HttpRequest.BodyPublishers.ofString("alphaFeature")).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertTrue(first.body().contains("alphaFeature"));
+
+            Files.writeString(readme, "betaFeature 更新后的项目说明，长度发生变化");
+            var updated = client.send(HttpRequest.newBuilder(endpoint).header("Content-Type", "text/plain")
+                            .POST(HttpRequest.BodyPublishers.ofString("betaFeature")).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, updated.statusCode());
+            assertTrue(updated.body().contains("betaFeature"));
+            assertFalse(updated.body().contains("alphaFeature"));
+        }
+    }
 }

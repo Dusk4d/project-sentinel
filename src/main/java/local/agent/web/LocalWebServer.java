@@ -32,6 +32,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class LocalWebServer implements AutoCloseable {
@@ -45,6 +46,7 @@ public final class LocalWebServer implements AutoCloseable {
     private final ExecutorService executor;
     private final ModelConfig modelConfig;
     private final Path agentStateDirectory;
+    private final ConcurrentHashMap<Path, LocalRagService> ragServices = new ConcurrentHashMap<>();
     private volatile ZipProjectUpload activeUpload;
     private final AtomicBoolean closed = new AtomicBoolean();
 
@@ -262,7 +264,7 @@ public final class LocalWebServer implements AutoCloseable {
                 return;
             }
             String question = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
-            String json = new LocalRagService(new WorkspaceGuard(project)).ask(question).toJson();
+            String json = ragFor(project).ask(question).toJson();
             send(exchange, 200, "application/json; charset=utf-8", json);
         } catch (RequestTooLargeException tooLarge) {
             send(exchange, 413, "application/json; charset=utf-8", "{\"error\":\"question exceeds 8 KiB limit\"}\n");
@@ -296,7 +298,7 @@ public final class LocalWebServer implements AutoCloseable {
                 return;
             }
             String question = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
-            var local = new LocalRagService(new WorkspaceGuard(project));
+            var local = ragFor(project);
             String json = new AiRagService(local, new OpenAiCompatibleClient(modelConfig)).ask(question).toJson();
             send(exchange, 200, "application/json; charset=utf-8", json);
         } catch (RequestTooLargeException tooLarge) {
@@ -489,8 +491,16 @@ public final class LocalWebServer implements AutoCloseable {
 
     private synchronized void replaceActiveUpload(ZipProjectUpload replacement) throws IOException {
         ZipProjectUpload previous = activeUpload;
-        if (previous != null) previous.close();
+        if (previous != null) {
+            ragServices.remove(previous.projectRoot().toAbsolutePath().normalize());
+            previous.close();
+        }
         activeUpload = replacement;
+    }
+
+    private LocalRagService ragFor(Path project) {
+        Path key = project.toAbsolutePath().normalize();
+        return ragServices.computeIfAbsent(key, ignored -> new LocalRagService(new WorkspaceGuard(project)));
     }
 
     private String projectId(Path project) {
@@ -536,6 +546,7 @@ public final class LocalWebServer implements AutoCloseable {
         executor.close();
         ZipProjectUpload upload = activeUpload;
         activeUpload = null;
+        ragServices.clear();
         if (upload != null) {
             try { upload.close(); }
             catch (IOException ignored) { }
