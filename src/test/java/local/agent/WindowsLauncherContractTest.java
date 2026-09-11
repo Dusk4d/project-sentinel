@@ -9,6 +9,15 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class WindowsLauncherContractTest {
+    @Test void mavenWrapperHandlesOrdinaryNonSymlinkMavenHome() throws Exception {
+        String wrapper = Files.readString(Path.of("mvnw.cmd"), StandardCharsets.UTF_8);
+
+        assertTrue(wrapper.contains("$null -eq $MAVEN_M2_ITEM.Target"),
+                "Wrapper 必须先判断普通目录的空 Target，不能直接索引空值");
+        assertFalse(wrapper.contains("(Get-Item $MAVEN_M2_PATH).Target[0]"),
+                "直接索引空 Target 会令部分 Windows PowerShell 环境无法启动 Maven");
+    }
+
     @Test void alwaysBuildsLatestJarAndStopsBeforeLaunchWhenBuildFails() throws Exception {
         String script = Files.readString(Path.of("start-web.cmd"), StandardCharsets.UTF_8);
         int build = script.indexOf("call mvnw.cmd --batch-mode --no-transfer-progress package");
