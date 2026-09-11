@@ -99,4 +99,17 @@ final class LocalRagServiceTest {
         assertTrue(overflow.answer().contains("结果可能不完整"));
         assertTrue(overflow.toJson().contains("\"indexTruncated\": true"));
     }
+
+    @Test void reportsChunkLimitOnlyAfterConfirmingAdditionalChunkInOneFile() throws Exception {
+        Path large = workspace.resolve("large.txt");
+        Files.writeString(large, "ab\n".repeat(40_002));
+        var exact = new LocalRagService(new WorkspaceGuard(workspace)).ask("ab");
+        assertEquals(5_000, exact.indexedChunks());
+        assertFalse(exact.indexTruncated(), "恰好达到分块上限不应误报截断");
+
+        Files.writeString(large, "ab\n".repeat(40_003));
+        var overflow = new LocalRagService(new WorkspaceGuard(workspace)).ask("ab");
+        assertEquals(5_000, overflow.indexedChunks());
+        assertTrue(overflow.indexTruncated(), "确认第 5001 个分块后必须报告截断");
+    }
 }

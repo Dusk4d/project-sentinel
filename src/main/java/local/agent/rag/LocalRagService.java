@@ -138,7 +138,7 @@ public final class LocalRagService {
         try {
             List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
             String relative = guard.root().relativize(file.toRealPath()).toString().replace('\\', '/');
-            for (int start = 0; start < lines.size() && chunks.size() < MAX_CHUNKS; start += CHUNK_STEP) {
+            for (int start = 0; start < lines.size() && chunks.size() <= MAX_CHUNKS; start += CHUNK_STEP) {
                 int end = Math.min(lines.size(), start + CHUNK_LINES);
                 String text = String.join("\n", lines.subList(start, end)).strip();
                 if (!text.isEmpty()) chunks.add(new Chunk(relative, start + 1, end, text, tokens(relative + " " + text)));
