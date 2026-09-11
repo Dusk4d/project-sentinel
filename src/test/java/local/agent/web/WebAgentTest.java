@@ -55,7 +55,7 @@ final class WebAgentTest {
             assertTrue(response.body().contains("start-web.cmd"));
             assertTrue(response.body().contains("\"modelRounds\":2"));
             assertTrue(response.body().contains("\"toolCalls\":1"));
-            assertTrue(response.body().contains("\"trace\":[{\"sequence\":1,\"name\":\"read\",\"success\":true}]"));
+            assertTrue(response.body().contains("\"trace\":[{\"sequence\":1,\"name\":\"read\",\"input\":\"README.md\",\"success\":true}]"));
         } finally { model.stop(0); }
     }
 

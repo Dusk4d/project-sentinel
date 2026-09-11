@@ -89,7 +89,7 @@ public final class ToolCallingAgentService {
                 if (++totalCalls > MAX_TOTAL_TOOL_CALLS) throw new IOException("工具调用超过 " + MAX_TOTAL_TOOL_CALLS + " 次限制");
                 String input = parseInput(call.arguments());
                 var result = workspace.callFunction(call.id(), call.name(), input);
-                trace.add(new AgentToolTrace(totalCalls, call.name(), result.success()));
+                trace.add(new AgentToolTrace(totalCalls, call.name(), traceInput(input), result.success()));
                 messages.add("{\"role\":\"tool\",\"tool_call_id\":" + JsonReportWriter.quote(call.id())
                         + ",\"content\":" + JsonReportWriter.quote(result.output()) + "}");
             }
@@ -108,6 +108,11 @@ public final class ToolCallingAgentService {
         boolean listOnlyTask = task.toLowerCase(java.util.Locale.ROOT)
                 .matches(".*(?:列出|枚举|目录|文件列表|list files?|show files?).*");
         return trace.stream().anyMatch(item -> item.success() && (listOnlyTask || !"list".equals(item.name())));
+    }
+
+    private static String traceInput(String input) {
+        String normalized = input.replaceAll("[\\p{Cntrl}\\s]+", " ").strip();
+        return normalized.length() <= 160 ? normalized : normalized.substring(0, 159) + "…";
     }
 
     private String parseInput(String arguments) throws IOException {

@@ -80,7 +80,8 @@ public final class AgentCheckpointStore {
         for (Object value : traceValues) {
             Map<String, Object> item = JsonCodec.object(value, "trace[]");
             trace.add(new AgentToolTrace(bounded(item.get("sequence"), "sequence", 1, 20),
-                    string(item.get("name"), "name"), bool(item.get("success"), "success")));
+                    string(item.get("name"), "name"), optionalString(item.get("input"), "input"),
+                    bool(item.get("success"), "success")));
         }
         if (trace.size() != calls) throw new IOException("Agent 检查点工具计数不一致");
         return Optional.of(new AgentCheckpoint(savedTask, rounds, calls, messages, trace));
@@ -144,7 +145,8 @@ public final class AgentCheckpointStore {
             if (i > 0) out.append(',');
             AgentToolTrace item = value.trace().get(i);
             out.append("{\"sequence\":").append(item.sequence()).append(",\"name\":")
-                    .append(JsonReportWriter.quote(item.name())).append(",\"success\":").append(item.success()).append('}');
+                    .append(JsonReportWriter.quote(item.name())).append(",\"input\":")
+                    .append(JsonReportWriter.quote(item.input())).append(",\"success\":").append(item.success()).append('}');
         }
         out.append(']');
         if (answer != null) out.append(",\n  \"answer\":").append(JsonReportWriter.quote(answer));
@@ -162,6 +164,9 @@ public final class AgentCheckpointStore {
     private static boolean optionalBool(Object value, String name) throws IOException {
         return value == null ? false : bool(value, name);
     }
+    private static String optionalString(Object value, String name) throws IOException {
+        return value == null ? "" : string(value, name);
+    }
 
     private static List<AgentToolTrace> parseTrace(Map<String, Object> root, int calls) throws IOException {
         if (!(root.get("trace") instanceof List<?> traceValues) || traceValues.size() > 20)
@@ -170,7 +175,8 @@ public final class AgentCheckpointStore {
         for (Object value : traceValues) {
             Map<String, Object> item = JsonCodec.object(value, "trace[]");
             trace.add(new AgentToolTrace(bounded(item.get("sequence"), "sequence", 1, 20),
-                    string(item.get("name"), "name"), bool(item.get("success"), "success")));
+                    string(item.get("name"), "name"), optionalString(item.get("input"), "input"),
+                    bool(item.get("success"), "success")));
         }
         if (trace.size() != calls) throw new IOException("Agent 检查点工具计数不一致");
         return List.copyOf(trace);

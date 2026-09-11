@@ -40,6 +40,17 @@ final class AgentCheckpointStoreTest {
         assertFalse(Files.exists(state));
     }
 
+    @Test void loadsLegacyTraceWithoutInputSummary() throws Exception {
+        Path workspace = Files.createDirectory(temporary.resolve("legacy-project"));
+        var store = new AgentCheckpointStore(workspace, temporary.resolve("legacy-state"));
+        store.save(new AgentCheckpoint("legacy", 1, 1,
+                List.of("{\"role\":\"user\",\"content\":\"legacy\"}"),
+                List.of(new AgentToolTrace(1, "read", true))));
+        String legacy = Files.readString(store.file()).replace("\"input\":\"\",", "");
+        Files.writeString(store.file(), legacy);
+        assertEquals("", store.load("legacy").orElseThrow().trace().getFirst().input());
+    }
+
     @Test void persistsFinalResultUntilCallerCommitsMemory() throws Exception {
         Path workspace = Files.createDirectory(temporary.resolve("result-project"));
         var store = new AgentCheckpointStore(workspace, temporary.resolve("result-state"));
