@@ -52,7 +52,7 @@ Linux/macOS：
 - `SENTINEL_MODEL_NAME`：服务支持的模型名。
 - `SENTINEL_MODEL_API_KEY`：仅在服务要求鉴权时设置。
 
-启动后通过 `/api/health` 的 `modelEnabled` 判断配置是否完整。该字段不代表远程服务一定可用；应在页面执行一次模型增强 RAG 和一次 Agent 分析作为连通性验收。单次模型请求默认超时 120 秒；本地小模型较慢时可设置 `SENTINEL_MODEL_TIMEOUT_SECONDS`，有效范围为 1–300 秒。不要把真实密钥写入 `.env`、启动脚本、Git、报告或问题截图。
+启动后通过 `/api/health` 的 `modelEnabled` 判断配置是否完整。该字段不代表远程服务一定可用；可点击页面“测试模型”或调用 `POST /api/model-check` 做最小连通性检查，再执行一次模型增强 RAG 和一次 Agent 分析作为功能验收。连通性检查不会在后台自动运行，使用按量付费端点时点击仍会产生一次最小模型请求。单次模型请求默认超时 120 秒；本地小模型较慢时可设置 `SENTINEL_MODEL_TIMEOUT_SECONDS`，有效范围为 1–300 秒。不要把真实密钥写入 `.env`、启动脚本、Git、报告或问题截图。
 
 ## 每日任务与状态
 

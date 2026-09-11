@@ -31,7 +31,49 @@ final class WebAiRagTest {
             var response = post(client, web.url() + "api/rag-ai", "如何启动？");
             assertEquals(503, response.statusCode());
             assertTrue(response.body().contains("not configured"));
+            var check = client.send(HttpRequest.newBuilder(URI.create(web.url() + "api/model-check"))
+                            .POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(503, check.statusCode());
         }
+    }
+
+    @Test void explicitlyChecksConfiguredModelConnectivity() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "demo", StandardCharsets.UTF_8);
+        var model = modelServer(200, "{\"choices\":[{\"message\":{\"content\":\"OK\"}}]}");
+        var config = new ModelConfig(URI.create("http://127.0.0.1:" + model.getAddress().getPort() + "/chat/completions"),
+                "test", "", Duration.ofSeconds(3));
+        try (var web = new LocalWebServer(workspace, 0, config); var client = HttpClient.newHttpClient()) {
+            web.start();
+            var page = client.send(HttpRequest.newBuilder(URI.create(web.url())).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertTrue(page.body().contains("id=\"model-check\""));
+            assertTrue(page.body().contains("/api/model-check"));
+            assertTrue(page.body().contains("测试模型"));
+            var response = client.send(HttpRequest.newBuilder(URI.create(web.url() + "api/model-check"))
+                            .POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("\"available\":true"));
+            assertTrue(response.body().matches("(?s).*\"latencyMillis\":\\d+.*"));
+        } finally { model.stop(0); }
+    }
+
+    @Test void reportsModelConnectivityFailureWithoutPretendingSuccess() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "demo", StandardCharsets.UTF_8);
+        var model = modelServer(503, "{\"error\":{\"message\":\"model unavailable\"}}");
+        var config = new ModelConfig(URI.create("http://127.0.0.1:" + model.getAddress().getPort() + "/chat/completions"),
+                "test", "", Duration.ofSeconds(3));
+        try (var web = new LocalWebServer(workspace, 0, config); var client = HttpClient.newHttpClient()) {
+            web.start();
+            var response = client.send(HttpRequest.newBuilder(URI.create(web.url() + "api/model-check"))
+                            .POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(502, response.statusCode());
+            assertTrue(response.body().contains("HTTP 503"));
+            assertTrue(response.body().contains("model unavailable"));
+            assertFalse(response.body().contains("\"available\":true"));
+        } finally { model.stop(0); }
     }
 
     @Test void returnsModelAnswerAndEvidenceWhenConfigured() throws Exception {

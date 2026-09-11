@@ -91,6 +91,7 @@ public final class LocalWebServer implements AutoCloseable {
         createContext("/api/upload-analysis", this::uploadAnalysis);
         createContext("/api/rag", this::rag);
         createContext("/api/rag-ai", this::ragAi);
+        createContext("/api/model-check", this::modelCheck);
         createContext("/api/agent-ai", this::agentAi);
         createContext("/api/agent-state", this::agentState);
         createContext("/api/report", this::report);
@@ -364,6 +365,32 @@ public final class LocalWebServer implements AutoCloseable {
         }
     }
 
+    private void modelCheck(HttpExchange exchange) throws IOException {
+        if (!exactPath(exchange, "/api/model-check")) { notFound(exchange); return; }
+        if (!method(exchange, "POST")) return;
+        if (modelConfig == null) {
+            send(exchange, 503, "application/json; charset=utf-8", "{\"error\":\"model is not configured\"}\n");
+            return;
+        }
+        var lease = scanGate.tryAcquire();
+        if (lease == null) { busy(exchange); return; }
+        long started = System.nanoTime();
+        try (lease) {
+            new OpenAiCompatibleClient(modelConfig).complete(
+                    "这是连通性检查。只回复 OK，不执行其他任务。", "ping");
+            long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+            send(exchange, 200, "application/json; charset=utf-8",
+                    "{\"available\":true,\"latencyMillis\":" + elapsed + "}\n");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            send(exchange, 503, "application/json; charset=utf-8", "{\"error\":\"model check interrupted\"}\n");
+        } catch (Exception failure) {
+            String message = failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
+            send(exchange, 502, "application/json; charset=utf-8",
+                    "{\"error\":" + JsonReportWriter.quote(message) + "}\n");
+        }
+    }
+
     private void agentState(HttpExchange exchange) throws IOException {
         if (!exactPath(exchange, "/api/agent-state")) { notFound(exchange); return; }
         if (!method(exchange, "GET")) return;
@@ -542,6 +569,7 @@ public final class LocalWebServer implements AutoCloseable {
             """
             .replace("<h2>项目问答（RAG）</h2>", "<h2>项目智能助手</h2>")
             .replace("<button id=\"ask\">问项目</button>", "<button id=\"ask\">RAG 问答</button><button id=\"agent\" disabled>Agent 分析</button>")
+            .replace("<span id=\"model-state\" class=\"muted\">（未配置模型）</span>", "<span id=\"model-state\" class=\"muted\">（未配置模型）</span><button id=\"model-check\" disabled>测试模型</button>")
             .replace("答案会基于当前项目文件生成，并附带证据位置。", "RAG 返回带位置的检索证据；Agent 会自主调用只读工具并汇总结果。")
             .replace("function download(){", """
                     async function runAgent(){const q=$('question').value.trim();if(!q){$('rag-answer').textContent='请先输入任务。';return}const b=$('agent');b.disabled=true;b.textContent='Agent 执行中…';$('rag-answer').classList.remove('error');$('rag-answer').textContent='模型正在选择并调用只读项目工具…';$('rag-evidence').replaceChildren();try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/agent-ai?project='+id,{method:'POST',headers:{'Content-Type':'text/plain; charset=utf-8'},body:q});const data=await r.json();if(!r.ok)throw Error(data.error||'Agent 执行失败');$('rag-answer').textContent=data.answer+'\\n\\n模型轮次：'+data.modelRounds+'，工具调用：'+data.toolCalls}catch(e){$('rag-answer').textContent=e.message;$('rag-answer').classList.add('error')}finally{b.disabled=false;b.textContent='Agent 分析'}}
@@ -551,10 +579,12 @@ public final class LocalWebServer implements AutoCloseable {
             .replace("（未配置模型，使用本地抽取式回答）", "（未配置模型，使用本地 RAG）")
             .replace("d.modelEnabled?'（模型已配置，可使用增强 RAG 与 Agent）'", "d.modelEnabled?'（模型已配置，可使用增强 RAG 与 Agent'+(d.agentMemoryEnabled?'，已启用持久记忆':'')+'）'")
             .replace("function download(){", "async function refreshAgentState(){try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/agent-state?project='+id);const d=await r.json();if(!r.ok)throw Error(d.error||'状态读取失败');$('agent-state').textContent=d.enabled?'Agent 记忆 '+d.memoryEntries+' 条 · 检查点 '+d.checkpoint:'Agent 当前为无状态模式'}catch(e){$('agent-state').textContent='Agent 状态不可用：'+e.message}}\nfunction download(){")
+            .replace("function download(){", "async function checkModel(){const b=$('model-check');b.disabled=true;b.textContent='测试中…';$('model-state').classList.remove('error');try{const r=await fetch('/api/model-check',{method:'POST'});const d=await r.json();if(!r.ok)throw Error(d.error||'模型测试失败');$('model-state').textContent='（模型连接正常，耗时 '+d.latencyMillis+' ms）'}catch(e){$('model-state').textContent='（模型连接失败：'+e.message+'）';$('model-state').classList.add('error')}finally{b.disabled=false;b.textContent='测试模型'}}\nfunction download(){")
             .replace("$('projects').addEventListener('change',scan);await scan()", "$('projects').addEventListener('change',async()=>{await scan();await refreshAgentState()});await scan();await refreshAgentState()")
             .replace("}))}catch(e){$('rag-answer').textContent=e.message", "}));await refreshAgentState()}catch(e){$('rag-answer').textContent=e.message")
             .replace("+'，工具调用：'+data.toolCalls}catch", "+'，工具调用：'+data.toolCalls;const trace=data.trace||[];$('rag-evidence').replaceChildren(...trace.map(item=>{const x=document.createElement('div');x.className='evidence';const title=document.createElement('strong');title.textContent=item.sequence+'. '+item.name+(item.success?' · 成功':' · 失败');const input=document.createElement('div');input.className='muted';input.textContent='调用参数：'+(item.input||'（空）');x.append(title,input);return x}))}catch")
-            .replace("$('ask').addEventListener('click',ask);", "$('ask').addEventListener('click',ask);$('agent').addEventListener('click',runAgent);")
+            .replace("$('ask').addEventListener('click',ask);", "$('ask').addEventListener('click',ask);$('agent').addEventListener('click',runAgent);$('model-check').addEventListener('click',checkModel);")
+            .replace("$('ai').disabled=!d.modelEnabled;$('agent').disabled=!d.modelEnabled;", "$('ai').disabled=!d.modelEnabled;$('agent').disabled=!d.modelEnabled;$('model-check').disabled=!d.modelEnabled;")
             .replace("</header><section", "</header><div id=\"upload-status\" class=\"muted\" role=\"status\" aria-live=\"polite\">ZIP 上限 20 MiB；选择后会自动开始检测。</div><section")
             .replace("async function upload(file){if(file.size>20*1024*1024){showError(Error('ZIP 不能超过 20 MiB'));return}",
                     "async function upload(file){const status=$('upload-status');$('zip').value='';status.classList.remove('error');if(!file){status.textContent='没有选择 ZIP 文件。';return}if(file.size>20*1024*1024){const message='ZIP 不能超过 20 MiB（当前 '+(file.size/1024/1024).toFixed(1)+' MiB）。';status.textContent=message;status.classList.add('error');showError(Error(message));return}")
