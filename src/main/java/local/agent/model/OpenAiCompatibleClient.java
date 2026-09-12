@@ -3,6 +3,8 @@ package local.agent.model;
 import local.agent.report.JsonReportWriter;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -11,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 public final class OpenAiCompatibleClient {
     static final int MAX_REQUEST_BYTES = 1024 * 1024;
@@ -48,6 +51,58 @@ public final class OpenAiCompatibleClient {
         String content = extractContent(json);
         if (content.isBlank()) throw new IOException("模型响应缺少 choices[0].message.content");
         return content.strip();
+    }
+
+    public String completeStreaming(String system, String user, Consumer<String> onDelta)
+            throws IOException, InterruptedException {
+        if (onDelta == null) throw new IllegalArgumentException("流式回调不能为空");
+        String body = "{\"model\":" + JsonReportWriter.quote(config.model())
+                + ",\"temperature\":0.1,\"stream\":true,\"messages\":[{\"role\":\"system\",\"content\":"
+                + JsonReportWriter.quote(system) + "},{\"role\":\"user\",\"content\":"
+                + JsonReportWriter.quote(user) + "}]}";
+        requireBoundedRequest(body);
+        var response = client.send(requestBuilder().POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
+                HttpResponse.BodyHandlers.ofInputStream());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            byte[] bytes;
+            try (var stream = response.body()) { bytes = stream.readNBytes(MAX_RESPONSE_BYTES + 1); }
+            if (bytes.length > MAX_RESPONSE_BYTES) throw new IOException("模型响应超过 2 MiB 限制");
+            throw modelError(response.statusCode(), new String(bytes, StandardCharsets.UTF_8));
+        }
+        var answer = new StringBuilder();
+        try (var stream = response.body()) {
+            readSse(stream, delta -> { answer.append(delta); onDelta.accept(delta); });
+        }
+        if (answer.toString().isBlank()) throw new IOException("模型流式响应缺少 choices[0].delta.content");
+        return answer.toString();
+    }
+
+    private static void readSse(InputStream stream, Consumer<String> onDelta) throws IOException {
+        long total = 0;
+        var line = new ByteArrayOutputStream();
+        for (int value; (value = stream.read()) >= 0;) {
+            if (++total > MAX_RESPONSE_BYTES) throw new IOException("模型响应超过 2 MiB 限制");
+            if (value == '\n') {
+                consumeSseLine(line, onDelta);
+                line.reset();
+            } else {
+                if (line.size() >= 256 * 1024) throw new IOException("模型流式事件超过 256 KiB 限制");
+                line.write(value);
+            }
+        }
+        if (line.size() > 0) consumeSseLine(line, onDelta);
+    }
+
+    private static void consumeSseLine(ByteArrayOutputStream bytes, Consumer<String> onDelta) throws IOException {
+        String line = bytes.toString(StandardCharsets.UTF_8).strip();
+        if (!line.startsWith("data:")) return;
+        String payload = line.substring(5).strip();
+        if (payload.isEmpty() || "[DONE]".equals(payload)) return;
+        Map<String, Object> root = JsonCodec.object(JsonCodec.parse(payload), "流式响应根值");
+        if (!(root.get("choices") instanceof List<?> choices) || choices.isEmpty()) return;
+        Map<String, Object> choice = JsonCodec.object(choices.get(0), "choices[0]");
+        Map<String, Object> delta = JsonCodec.object(choice.get("delta"), "choices[0].delta");
+        if (delta.get("content") instanceof String content && !content.isEmpty()) onDelta.accept(content);
     }
 
     ModelTurn completeTurn(String system, List<String> messageJson, String toolsJson) throws IOException, InterruptedException {

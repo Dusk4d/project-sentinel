@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.List;
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -108,6 +109,49 @@ final class OpenAiCompatibleClientTest {
             assertFalse(turn.assistantMessageJson().contains("\"index\""));
             assertTrue(turn.assistantMessageJson().contains("\"id\":\"call_1\""));
             assertTrue(turn.assistantMessageJson().contains("\"type\":\"function\""));
+        } finally { server.stop(0); }
+    }
+
+    @Test void streamsSseDeltasInOrderAndReturnsTheCompleteAnswer() throws Exception {
+        var requestBody = new AtomicReference<String>();
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] response = ("data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\n\n"
+                    + "data: {\"choices\":[{\"delta\":{\"content\":\"，项目\"}}]}\n\n"
+                    + "data: [DONE]\n\n").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var config = new ModelConfig(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"),
+                    "test", "", Duration.ofSeconds(3));
+            var deltas = new ArrayList<String>();
+            String answer = new OpenAiCompatibleClient(config).completeStreaming("system", "question", deltas::add);
+            assertEquals("你好，项目", answer);
+            assertEquals(List.of("你好", "，项目"), deltas);
+            assertTrue(requestBody.get().contains("\"stream\":true"));
+        } finally { server.stop(0); }
+    }
+
+    @Test void rejectsOversizedSingleStreamingEvent() throws Exception {
+        var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().write(("data: " + "x".repeat(257 * 1024)).getBytes(StandardCharsets.UTF_8));
+            exchange.close();
+        });
+        server.start();
+        try {
+            var config = new ModelConfig(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"),
+                    "test", "", Duration.ofSeconds(3));
+            var failure = assertThrows(java.io.IOException.class,
+                    () -> new OpenAiCompatibleClient(config).completeStreaming("system", "question", ignored -> { }));
+            assertTrue(failure.getMessage().contains("256 KiB"));
         } finally { server.stop(0); }
     }
 }
