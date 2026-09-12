@@ -4,6 +4,7 @@ import local.agent.WorkspaceAgent;
 import local.agent.report.JsonReportWriter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.List;
@@ -11,6 +12,8 @@ import java.util.List;
 public final class ToolCallingAgentService {
     private static final int MAX_MODEL_ROUNDS = 5;
     private static final int MAX_TOTAL_TOOL_CALLS = 20;
+    private static final int MAX_TOOL_OUTPUT_BYTES = 16 * 1024;
+    private static final String TOOL_OUTPUT_TRUNCATED = "\n...[Agent 已按上下文预算截断工具输出]";
     private static final String EVIDENCE_REQUIRED = "在完成任务前必须获取足以支持结论的当前工作区证据。除非任务只是列出文件或目录，否则仅调用 list 不足以证明文件内容；请继续调用 read、search、health 或 rag_query，再基于实际输出回答。";
     private static final String SYSTEM = """
             你是 Project Sentinel 的只读项目分析 Agent。根据任务自主选择提供的工具。
@@ -91,7 +94,7 @@ public final class ToolCallingAgentService {
                 var result = workspace.callFunction(call.id(), call.name(), input);
                 trace.add(new AgentToolTrace(totalCalls, call.name(), traceInput(input), result.success(), result.evidence()));
                 messages.add("{\"role\":\"tool\",\"tool_call_id\":" + JsonReportWriter.quote(call.id())
-                        + ",\"content\":" + JsonReportWriter.quote(result.output()) + "}");
+                        + ",\"content\":" + JsonReportWriter.quote(boundedToolOutput(result.output())) + "}");
             }
             if (checkpoints != null)
                 checkpoints.save(new AgentCheckpoint(request, round, totalCalls, messages, trace));
@@ -102,6 +105,24 @@ public final class ToolCallingAgentService {
     private static String limited(String value, int maximum) {
         if (value == null) return "";
         return value.length() <= maximum ? value : value.substring(0, maximum - 12) + "...[截断]";
+    }
+
+    private static String boundedToolOutput(String value) {
+        String output = value == null ? "" : value;
+        if (output.getBytes(StandardCharsets.UTF_8).length <= MAX_TOOL_OUTPUT_BYTES) return output;
+        int budget = MAX_TOOL_OUTPUT_BYTES - TOOL_OUTPUT_TRUNCATED.getBytes(StandardCharsets.UTF_8).length;
+        var prefix = new StringBuilder();
+        int used = 0;
+        for (int offset = 0; offset < output.length();) {
+            int codePoint = output.codePointAt(offset);
+            String character = new String(Character.toChars(codePoint));
+            int bytes = character.getBytes(StandardCharsets.UTF_8).length;
+            if (used + bytes > budget) break;
+            prefix.append(character);
+            used += bytes;
+            offset += Character.charCount(codePoint);
+        }
+        return prefix + TOOL_OUTPUT_TRUNCATED;
     }
 
     private static boolean hasSufficientEvidence(String task, List<AgentToolTrace> trace) {

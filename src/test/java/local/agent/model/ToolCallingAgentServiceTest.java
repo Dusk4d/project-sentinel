@@ -180,6 +180,36 @@ final class ToolCallingAgentServiceTest {
         } finally { server.stop(0); }
     }
 
+    @Test void boundsRepeatedLargeToolResultsBeforeSendingThemBackToModel() throws Exception {
+        Files.writeString(workspace.resolve("large.txt"), "中".repeat(30_000), StandardCharsets.UTF_8);
+        var requests = new ArrayList<String>();
+        var server = scriptedServer(List.of(
+                toolCallsResponse("a", 8),
+                toolCallsResponse("b", 8),
+                toolCallsResponse("c", 4),
+                "{\"choices\":[{\"message\":{\"content\":\"已读取并分析大文件。\"}}]}"), requests);
+        try {
+            var result = service(server).run("分析 large.txt 的内容");
+            assertEquals(4, result.modelRounds());
+            assertEquals(20, result.toolCalls());
+            assertEquals(4, requests.size());
+            assertTrue(requests.stream().allMatch(request ->
+                    request.getBytes(StandardCharsets.UTF_8).length < OpenAiCompatibleClient.MAX_REQUEST_BYTES));
+            assertTrue(requests.get(1).contains("Agent 已按上下文预算截断工具输出"));
+            assertTrue(requests.get(3).getBytes(StandardCharsets.UTF_8).length < 500 * 1024,
+                    "20 次大文件读取也应保留充足的模型请求余量");
+        } finally { server.stop(0); }
+    }
+
+    private static String toolCallsResponse(String prefix, int count) {
+        var calls = new ArrayList<String>();
+        for (int i = 0; i < count; i++) {
+            calls.add("{\"id\":\"" + prefix + i
+                    + "\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"input\\\":\\\"large.txt\\\"}\"}}");
+        }
+        return "{\"choices\":[{\"message\":{\"tool_calls\":[" + String.join(",", calls) + "]}}]}";
+    }
+
     private ToolCallingAgentService service(HttpServer server) {
         var config = new ModelConfig(URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat/completions"),
                 "test", "", Duration.ofSeconds(3));
