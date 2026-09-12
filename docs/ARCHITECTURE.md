@@ -77,7 +77,7 @@ ZIP 检测成功后，服务把唯一活动上传注册为临时项目 ID `uploa
 
 `AiRagService` 是可选生成层：先运行本地检索，仅在存在证据时调用 `OpenAiCompatibleClient`。客户端使用 JDK HTTP API 请求 Chat Completions 兼容端点，设置连接/请求超时、1 MiB 请求上限及 2 MiB 响应上限；模型不可用时保留证据并降级为抽取式回答。模型与 API 密钥只从进程环境读取，不成为基础离线路径的依赖。
 
-`ToolCallingAgentService` 实现完整的 Chat Completions 工具调用循环。它发送 `FunctionRegistry` 的工具 Schema，解析 assistant `tool_calls`，严格校验 `{input: string}` 参数，通过 `WorkspaceAgent` 调度，并把受限工具结果作为 tool 消息加入下一轮。若模型尚未取得足够的项目证据就尝试直接作答，循环会拒绝该答案并要求继续调用工具；纯目录任务允许 `list` 作为证据，其他内容问题必须成功执行至少一个非 `list` 工具，避免把文件名误当作文件内容。客户端重建标准 assistant 工具消息并移除响应专用 `index`，发送前也规范化旧检查点，兼容 Ollama 对整数索引的严格校验。通用 `JsonCodec` 负责结构化解析，不依赖字段顺序或字符串搜索。模型轮次、单轮及总调用数均有硬上限。
+`ToolCallingAgentService` 实现完整的 Chat Completions 工具调用循环。它发送 `FunctionRegistry` 的工具 Schema，解析 assistant `tool_calls`，严格校验 `{input: string}` 参数，通过 `WorkspaceAgent` 调度，并把受限工具结果作为 tool 消息加入下一轮。每次工具输出按 UTF-8 截断到 16 KiB，截断只发生在完整 Unicode 码点边界并附加可见标记，从而让 20 次调用的最坏情况仍低于客户端 1 MiB 请求上限。若模型尚未取得足够的项目证据就尝试直接作答，循环会拒绝该答案并要求继续调用工具；纯目录任务允许 `list` 作为证据，其他内容问题必须成功执行至少一个非 `list` 工具，避免把文件名误当作文件内容。客户端重建标准 assistant 工具消息并移除响应专用 `index`，发送前也规范化旧检查点，兼容 Ollama 对整数索引的严格校验。通用 `JsonCodec` 负责结构化解析，不依赖字段顺序或字符串搜索。模型轮次、单轮及总调用数均有硬上限。
 
 `AgentMemoryStore` 为可选有状态命令保存成功完成的任务和最终回答。记忆文档带 schema 版本和规范化工作区身份，原子更新且受条数/字节双重边界约束；读取时验证时间单调性。`StateRunLock` 防止同一状态目录并发覆盖。模型上下文只接收最近五条截断记录，当前任务仍位于最后。
 
