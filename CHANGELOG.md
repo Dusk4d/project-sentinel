@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- `search` 工具将单条命中压缩为围绕关键词的 500 字符摘录，并将总 UTF-8 输出限制为 64 KiB，达到上限时显式标记，避免超长源码行挤爆 Agent 模型上下文。
 - Agent 的 `read` 与 `search` 工具拒绝读取 `.env`、凭据/私钥文件及常见生成目录；搜索遍历会在目录层剪枝，避免敏感内容进入模型上下文。
 - Function Calling Agent 区分“工具执行成功”和“取得有效证据”；空搜索与无命中 RAG 不再满足回答门禁，并在 CLI、Web 轨迹及可恢复检查点中公开证据状态。
 - 修复 Maven Wrapper 在普通（非符号链接）`.m2` 目录下直接索引空 `Target` 导致的 Windows PowerShell 启动失败。

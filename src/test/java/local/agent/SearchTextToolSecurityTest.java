@@ -49,4 +49,31 @@ final class SearchTextToolSecurityTest {
         assertTrue(safe.evidence());
         assertTrue(safe.output().contains("Safe.java:1"));
     }
+
+    @Test void boundsLongSearchExcerptsAndTotalUtf8Output() throws Exception {
+        for (int index = 0; index < 100; index++)
+            Files.writeString(root.resolve("Long" + index + ".java"), "测".repeat(1_000) + " BOUND_QUERY tail");
+
+        ToolResult result = new SearchTextTool(new WorkspaceGuard(root)).execute("BOUND_QUERY");
+
+        assertTrue(result.success());
+        assertTrue(result.evidence());
+        assertTrue(result.output().contains("BOUND_QUERY"), "摘录必须围绕实际命中位置");
+        assertTrue(result.output().contains("64 KiB 上限"), "总输出截断必须显式说明");
+        assertTrue(result.output().getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 64 * 1024);
+    }
+
+    @Test void reportsHitLimitOnlyAfterProbingAnAdditionalMatch() throws Exception {
+        String exactContent = ("LIMIT_QUERY\n").repeat(100);
+        Path source = root.resolve("Matches.java");
+        Files.writeString(source, exactContent);
+        var search = new SearchTextTool(new WorkspaceGuard(root));
+
+        ToolResult exact = search.execute("LIMIT_QUERY");
+        assertFalse(exact.output().contains("后续命中已省略"), "恰好 100 条不得误报截断");
+
+        Files.writeString(source, exactContent + "LIMIT_QUERY\n");
+        ToolResult overflow = search.execute("LIMIT_QUERY");
+        assertTrue(overflow.output().contains("后续命中已省略"), "确认第 101 条后必须报告截断");
+    }
 }
