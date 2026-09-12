@@ -19,6 +19,8 @@ public final class ReadFileTool implements Tool {
         try {
             var path = guard.resolve(input);
             if (!Files.isRegularFile(path)) return ToolResult.error("文件不存在: " + input);
+            if (ToolFilePolicy.ignoredPath(guard.root(), path) || ToolFilePolicy.sensitive(path))
+                return ToolResult.error("拒绝读取敏感文件或生成目录内容");
             if (Files.size(path) > MAX_BYTES) return ToolResult.error("文件超过 128 KiB 限制");
             return ToolResult.ok(Files.readString(path, StandardCharsets.UTF_8));
         } catch (SecurityException | IOException e) { return ToolResult.error(e.getMessage()); }
