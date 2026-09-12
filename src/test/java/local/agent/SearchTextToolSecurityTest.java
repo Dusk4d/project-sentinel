@@ -70,10 +70,23 @@ final class SearchTextToolSecurityTest {
         var search = new SearchTextTool(new WorkspaceGuard(root));
 
         ToolResult exact = search.execute("LIMIT_QUERY");
-        assertFalse(exact.output().contains("后续命中已省略"), "恰好 100 条不得误报截断");
+        assertFalse(exact.output().contains("后续范围已省略"), "恰好 100 条不得误报截断");
 
         Files.writeString(source, exactContent + "LIMIT_QUERY\n");
         ToolResult overflow = search.execute("LIMIT_QUERY");
-        assertTrue(overflow.output().contains("后续命中已省略"), "确认第 101 条后必须报告截断");
+        assertTrue(overflow.output().contains("后续范围已省略"), "确认第 101 条后必须报告截断");
+    }
+
+    @Test void reportsFileLimitOnlyAfterProbingAnAdditionalEligibleFile() throws Exception {
+        for (int index = 0; index < 2_000; index++) Files.writeString(root.resolve("doc-" + index + ".txt"), "none");
+        var search = new SearchTextTool(new WorkspaceGuard(root));
+
+        ToolResult exact = search.execute("ABSENT_AT_EXACT_LIMIT");
+        assertEquals("未找到匹配内容", exact.output(), "恰好 2000 个文件不得误报不完整");
+
+        Files.writeString(root.resolve("overflow.txt"), "none");
+        ToolResult overflow = search.execute("ABSENT_AT_EXACT_LIMIT");
+        assertFalse(overflow.evidence());
+        assertTrue(overflow.output().contains("可能不完整"), "确认第 2001 个文件后必须警告扫描不完整");
     }
 }

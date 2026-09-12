@@ -17,7 +17,8 @@ public final class SearchTextTool implements Tool {
     private static final int MAX_HITS = 100;
     private static final int MAX_EXCERPT_CHARS = 500;
     private static final int MAX_OUTPUT_BYTES = 64 * 1024;
-    private static final String OUTPUT_LIMIT_NOTICE = "搜索结果已达到数量或 64 KiB 上限，后续命中已省略";
+    private static final String LIMIT_NOTICE = "搜索结果已达到文件、数量或 64 KiB 上限，后续范围已省略";
+    private static final String INCOMPLETE_NO_HIT = "搜索范围已达到文件、数量或 64 KiB 上限，未命中结果可能不完整";
     private final WorkspaceGuard guard;
     public SearchTextTool(WorkspaceGuard guard) { this.guard = guard; }
     public String name() { return "search"; }
@@ -41,7 +42,10 @@ public final class SearchTextTool implements Tool {
                 @Override public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attributes) {
                     if (!isSafeRegularFile(file) || ToolFilePolicy.sensitive(file) || attributes.size() > 128 * 1024)
                         return FileVisitResult.CONTINUE;
-                    if (++files[0] > MAX_FILES) return FileVisitResult.TERMINATE;
+                    if (++files[0] > MAX_FILES) {
+                        outputLimited[0] = true;
+                        return FileVisitResult.TERMINATE;
+                    }
                     try {
                         int lineNo = 0;
                         for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
@@ -55,7 +59,7 @@ public final class SearchTextTool implements Tool {
                                 int separator = hits.isEmpty() ? 0 : System.lineSeparator().getBytes(StandardCharsets.UTF_8).length;
                                 int required = separator + hit.getBytes(StandardCharsets.UTF_8).length;
                                 int notice = System.lineSeparator().getBytes(StandardCharsets.UTF_8).length
-                                        + OUTPUT_LIMIT_NOTICE.getBytes(StandardCharsets.UTF_8).length;
+                                        + LIMIT_NOTICE.getBytes(StandardCharsets.UTF_8).length;
                                 if (outputBytes[0] + required + notice > MAX_OUTPUT_BYTES) {
                                     outputLimited[0] = true;
                                     return FileVisitResult.TERMINATE;
@@ -72,10 +76,9 @@ public final class SearchTextTool implements Tool {
                     return FileVisitResult.CONTINUE;
                 }
             });
-            if (hits.isEmpty()) return ToolResult.noEvidence(outputLimited[0]
-                    ? "搜索命中无法在 64 KiB 输出上限内安全返回" : "未找到匹配内容");
+            if (hits.isEmpty()) return ToolResult.noEvidence(outputLimited[0] ? INCOMPLETE_NO_HIT : "未找到匹配内容");
             String output = String.join(System.lineSeparator(), hits);
-            if (outputLimited[0]) output += System.lineSeparator() + OUTPUT_LIMIT_NOTICE;
+            if (outputLimited[0]) output += System.lineSeparator() + LIMIT_NOTICE;
             return ToolResult.ok(output);
         } catch (IOException e) { return ToolResult.error(e.getMessage()); }
     }
