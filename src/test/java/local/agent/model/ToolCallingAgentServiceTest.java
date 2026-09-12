@@ -128,6 +128,26 @@ final class ToolCallingAgentServiceTest {
         } finally { server.stop(0); }
     }
 
+    @Test void successfulToolWithoutEvidenceCannotGroundFinalAnswer() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "真实项目说明", StandardCharsets.UTF_8);
+        var requests = new ArrayList<String>();
+        var server = scriptedServer(List.of(
+                "{\"choices\":[{\"message\":{\"tool_calls\":[{\"id\":\"empty_1\",\"function\":{\"name\":\"search\",\"arguments\":\"{\\\"input\\\":\\\"ABSENT_SYMBOL\\\"}\"}}]}}]}",
+                "{\"choices\":[{\"message\":{\"content\":\"搜索执行成功，所以直接猜测\"}}]}",
+                "{\"choices\":[{\"message\":{\"tool_calls\":[{\"id\":\"read_1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"input\\\":\\\"README.md\\\"}\"}}]}}]}",
+                "{\"choices\":[{\"message\":{\"content\":\"基于真实项目说明回答\"}}]}"), requests);
+        try {
+            var result = service(server).run("分析不存在的符号");
+            assertEquals(4, result.modelRounds());
+            assertEquals(2, result.toolCalls());
+            assertTrue(result.trace().get(0).success());
+            assertFalse(result.trace().get(0).evidence());
+            assertTrue(result.trace().get(1).evidence());
+            assertTrue(requests.get(2).contains("必须获取足以支持结论"));
+            assertTrue(result.toJson().contains("\"evidence\":false"));
+        } finally { server.stop(0); }
+    }
+
     @Test void resumesAfterModelFailureWithoutRepeatingCompletedToolRound() throws Exception {
         Files.writeString(workspace.resolve("README.md"), "运行 start-web.cmd 后访问 8787。", StandardCharsets.UTF_8);
         var requests = new ArrayList<String>();

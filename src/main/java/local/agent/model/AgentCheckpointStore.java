@@ -79,9 +79,10 @@ public final class AgentCheckpointStore {
         var trace = new ArrayList<AgentToolTrace>();
         for (Object value : traceValues) {
             Map<String, Object> item = JsonCodec.object(value, "trace[]");
+            boolean success = bool(item.get("success"), "success");
             trace.add(new AgentToolTrace(bounded(item.get("sequence"), "sequence", 1, 20),
-                    string(item.get("name"), "name"), optionalString(item.get("input"), "input"),
-                    bool(item.get("success"), "success")));
+                    string(item.get("name"), "name"), optionalString(item.get("input"), "input"), success,
+                    item.get("evidence") == null ? success : bool(item.get("evidence"), "evidence")));
         }
         if (trace.size() != calls) throw new IOException("Agent 检查点工具计数不一致");
         return Optional.of(new AgentCheckpoint(savedTask, rounds, calls, messages, trace));
@@ -146,7 +147,8 @@ public final class AgentCheckpointStore {
             AgentToolTrace item = value.trace().get(i);
             out.append("{\"sequence\":").append(item.sequence()).append(",\"name\":")
                     .append(JsonReportWriter.quote(item.name())).append(",\"input\":")
-                    .append(JsonReportWriter.quote(item.input())).append(",\"success\":").append(item.success()).append('}');
+                    .append(JsonReportWriter.quote(item.input())).append(",\"success\":").append(item.success())
+                    .append(",\"evidence\":").append(item.evidence()).append('}');
         }
         out.append(']');
         if (answer != null) out.append(",\n  \"answer\":").append(JsonReportWriter.quote(answer));
@@ -174,9 +176,10 @@ public final class AgentCheckpointStore {
         var trace = new ArrayList<AgentToolTrace>();
         for (Object value : traceValues) {
             Map<String, Object> item = JsonCodec.object(value, "trace[]");
+            boolean success = bool(item.get("success"), "success");
             trace.add(new AgentToolTrace(bounded(item.get("sequence"), "sequence", 1, 20),
-                    string(item.get("name"), "name"), optionalString(item.get("input"), "input"),
-                    bool(item.get("success"), "success")));
+                    string(item.get("name"), "name"), optionalString(item.get("input"), "input"), success,
+                    item.get("evidence") == null ? success : bool(item.get("evidence"), "evidence")));
         }
         if (trace.size() != calls) throw new IOException("Agent 检查点工具计数不一致");
         return List.copyOf(trace);

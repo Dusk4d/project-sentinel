@@ -17,7 +17,8 @@ public record ToolCallingAgentResult(String answer, int modelRounds, int toolCal
             out.append("\n工具轨迹：\n");
             for (AgentToolTrace item : trace) out.append("- ").append(item.sequence()).append(". ")
                     .append(item.name()).append(item.input().isEmpty() ? "" : " (" + item.input() + ")")
-                    .append(item.success() ? " [成功]\n" : " [失败]\n");
+                    .append(item.success() ? " [成功]" : " [失败]")
+                    .append(item.evidence() ? " [有证据]\n" : " [无证据]\n");
         }
         return out.toString();
     }
@@ -31,7 +32,8 @@ public record ToolCallingAgentResult(String answer, int modelRounds, int toolCal
             AgentToolTrace item = trace.get(i);
             out.append("{\"sequence\":").append(item.sequence()).append(",\"name\":")
                     .append(JsonReportWriter.quote(item.name())).append(",\"input\":")
-                    .append(JsonReportWriter.quote(item.input())).append(",\"success\":").append(item.success()).append('}');
+                    .append(JsonReportWriter.quote(item.input())).append(",\"success\":").append(item.success())
+                    .append(",\"evidence\":").append(item.evidence()).append('}');
         }
         return out.append("]}\n").toString();
     }

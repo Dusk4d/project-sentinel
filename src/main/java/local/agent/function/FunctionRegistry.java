@@ -34,14 +34,14 @@ public final class FunctionRegistry {
     public FunctionCallResult call(String callId, String name, String input) {
         String stableId = callId == null || callId.isBlank() ? "call_" + UUID.randomUUID() : callId;
         RegisteredFunction registered = functions.get(name);
-        if (registered == null) return new FunctionCallResult(1, stableId, name, false, "未知工具: " + name);
+        if (registered == null) return new FunctionCallResult(1, stableId, name, false, false, "未知工具: " + name);
         ToolResult result;
         try { result = registered.tool().execute(input == null ? "" : input); }
         catch (RuntimeException failure) {
             String message = failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
             result = ToolResult.error(message);
         }
-        return new FunctionCallResult(1, stableId, name, result.success(), result.output());
+        return new FunctionCallResult(1, stableId, name, result.success(), result.evidence(), result.output());
     }
 
     private record RegisteredFunction(FunctionDefinition definition, Tool tool) { }

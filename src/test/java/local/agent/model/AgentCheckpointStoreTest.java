@@ -46,9 +46,11 @@ final class AgentCheckpointStoreTest {
         store.save(new AgentCheckpoint("legacy", 1, 1,
                 List.of("{\"role\":\"user\",\"content\":\"legacy\"}"),
                 List.of(new AgentToolTrace(1, "read", true))));
-        String legacy = Files.readString(store.file()).replace("\"input\":\"\",", "");
+        String legacy = Files.readString(store.file()).replace("\"input\":\"\",", "")
+                .replace(",\"evidence\":true", "");
         Files.writeString(store.file(), legacy);
         assertEquals("", store.load("legacy").orElseThrow().trace().getFirst().input());
+        assertTrue(store.load("legacy").orElseThrow().trace().getFirst().evidence());
     }
 
     @Test void persistsFinalResultUntilCallerCommitsMemory() throws Exception {

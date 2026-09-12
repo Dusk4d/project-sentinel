@@ -32,7 +32,8 @@ public final class SearchTextTool implements Tool {
                     }
                 } catch (IOException ignored) { }
             }
-            return ToolResult.ok(hits.isEmpty() ? "未找到匹配内容" : String.join(System.lineSeparator(), hits));
+            return hits.isEmpty() ? ToolResult.noEvidence("未找到匹配内容")
+                    : ToolResult.ok(String.join(System.lineSeparator(), hits));
         } catch (IOException e) { return ToolResult.error(e.getMessage()); }
     }
 
