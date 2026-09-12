@@ -28,7 +28,9 @@ public final class ProjectAnalyzer {
             "package.json", "pyproject.toml", "Cargo.toml", "go.mod");
     private static final Pattern ACTION_MARKER = Pattern.compile("(?:^|\\s)(?://|#|/\\*|\\*)\\s*(TODO|FIXME|HACK)\\b", Pattern.CASE_INSENSITIVE);
     private final Map<Path, CachedTodoScan> todoCache = new HashMap<>();
+    private final Map<Path, CachedMeaningfulText> meaningfulTextCache = new HashMap<>();
     private long todoFilesRead;
+    private long meaningfulTextFilesRead;
 
     public ProjectProfile analyze(Path root) throws IOException {
         if (!Files.isDirectory(root)) throw new IOException("项目目录不存在: " + root.toAbsolutePath().normalize());
@@ -51,6 +53,7 @@ public final class ProjectAnalyzer {
                 .filter(path -> isSafeRegularFile(normalized, path)).toList();
         boolean buildManifestPresent = !buildManifests.isEmpty();
         boolean build = buildManifests.stream().anyMatch(path -> hasMeaningfulText(path, config.maxTextBytes()));
+        pruneMeaningfulTextCache(normalized, readmes, buildManifests);
         boolean gitIgnore = Files.isRegularFile(normalized.resolve(".gitignore"));
         boolean license = files.stream().anyMatch(p -> p.getParent().equals(normalized)
                 && p.getFileName().toString().toLowerCase(Locale.ROOT).matches("license([._-].*)?|copying([._-].*)?"));
@@ -126,14 +129,32 @@ public final class ProjectAnalyzer {
         catch (IOException e) { return false; }
     }
 
-    private boolean hasMeaningfulText(Path file, long maxBytes) {
+    private synchronized boolean hasMeaningfulText(Path file, long maxBytes) {
         try {
-            if (Files.size(file) == 0) return false;
-            if (Files.size(file) > maxBytes) return true;
-            return !Files.readString(file, StandardCharsets.UTF_8).isBlank();
+            Path real = file.toRealPath();
+            BasicFileAttributes attributes = Files.readAttributes(real, BasicFileAttributes.class);
+            FileStamp stamp = new FileStamp(attributes.size(), attributes.lastModifiedTime(), maxBytes);
+            CachedMeaningfulText cached = meaningfulTextCache.get(real);
+            if (cached != null && cached.stamp().equals(stamp)) return cached.meaningful();
+            boolean meaningful;
+            if (attributes.size() == 0) meaningful = false;
+            else if (attributes.size() > maxBytes) meaningful = true;
+            else {
+                meaningful = !Files.readString(real, StandardCharsets.UTF_8).isBlank();
+                meaningfulTextFilesRead++;
+            }
+            meaningfulTextCache.put(real, new CachedMeaningfulText(stamp, meaningful));
+            return meaningful;
         } catch (IOException unreadable) {
             return true;
         }
+    }
+
+    private synchronized void pruneMeaningfulTextCache(Path root, List<Path> readmes, List<Path> manifests) {
+        var retained = new HashSet<Path>();
+        for (Path path : readmes) try { retained.add(path.toRealPath()); } catch (IOException ignored) { }
+        for (Path path : manifests) try { retained.add(path.toRealPath()); } catch (IOException ignored) { }
+        meaningfulTextCache.keySet().removeIf(path -> path.startsWith(root) && !retained.contains(path));
     }
 
     private boolean isReadme(Path path) {
@@ -189,6 +210,7 @@ public final class ProjectAnalyzer {
     }
 
     long todoFilesRead() { return todoFilesRead; }
+    long meaningfulTextFilesRead() { return meaningfulTextFilesRead; }
 
     private String evidenceLocations(List<String> locations) {
         return locations.isEmpty() ? "" : "，位置示例 " + locations;
@@ -197,6 +219,7 @@ public final class ProjectAnalyzer {
     private record TodoScan(int count, List<String> locations) { }
     private record FileStamp(long size, FileTime modified, long maxTextBytes) { }
     private record CachedTodoScan(FileStamp stamp, List<Integer> lineNumbers) { }
+    private record CachedMeaningfulText(FileStamp stamp, boolean meaningful) { }
 
     private String detectEcosystem(Path root) {
         if (Files.exists(root.resolve("pom.xml"))) return "Java / Maven";

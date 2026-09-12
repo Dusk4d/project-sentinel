@@ -44,4 +44,28 @@ final class ProjectAnalyzerCacheTest {
         assertEquals(1, analyzer.analyze(first).todoCount());
         assertEquals(2, analyzer.todoFilesRead(), "切回未变化项目时应复用其独立缓存");
     }
+
+    @Test void reusesAndInvalidatesReadmeAndBuildManifestContentChecks() throws Exception {
+        Path readme = Files.writeString(project.resolve("README.md"), "项目说明\n");
+        Path pom = Files.writeString(project.resolve("pom.xml"), "<project/>\n");
+        var analyzer = new ProjectAnalyzer();
+
+        var initial = analyzer.analyze(project);
+        assertEquals(true, initial.hasReadme());
+        assertEquals(true, initial.hasBuildFile());
+        assertEquals(2, analyzer.meaningfulTextFilesRead());
+        analyzer.analyze(project);
+        assertEquals(2, analyzer.meaningfulTextFilesRead(), "未变化的 README 与构建清单不得重复读取");
+
+        Files.writeString(readme, "   \n");
+        var emptyReadme = analyzer.analyze(project);
+        assertEquals(3, analyzer.meaningfulTextFilesRead(), "只应重新读取变化的 README");
+        assertEquals("docs.readme-empty", emptyReadme.findings().stream()
+                .filter(finding -> finding.ruleId().startsWith("docs.readme"))
+                .findFirst().orElseThrow().ruleId());
+
+        Files.delete(pom);
+        assertEquals(false, analyzer.analyze(project).hasBuildFile());
+        assertEquals(3, analyzer.meaningfulTextFilesRead(), "删除清单不得触发无意义读取或保留旧结果");
+    }
 }
