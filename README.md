@@ -163,7 +163,7 @@ Web 项目目录最多保留 200 项，只有确认发现第 201 项时才标记
 
 Web RAG 接口为 `POST /api/rag?project=<项目ID>`，只接受 UTF-8 `text/plain`，问题请求体最多 8 KiB，并与健康扫描共享单实例准入控制和启动时生成的项目白名单。
 
-模型已配置时，`POST /api/rag-ai?project=<项目ID>` 使用相同的请求与安全边界。`/api/projects` 和 `/api/health` 只通过 `modelEnabled` 布尔值公开能力状态，不公开端点、模型名或密钥。模型失败时接口返回带降级原因的本地回答。
+模型已配置时，页面调用 `POST /api/rag-ai-stream?project=<项目ID>`，通过 SSE 在模型生成期间逐段显示回答，并在 `done` 事件中返回完整答案、降级说明和检索证据；兼容 JSON 接口 `POST /api/rag-ai` 继续保留。两者使用相同的项目白名单、请求上限和扫描门禁。`/api/projects` 和 `/api/health` 只通过 `modelEnabled` 布尔值公开能力状态，不公开端点、模型名或密钥。模型失败时最终事件返回带降级原因的本地回答。
 
 同一模型配置还会启用页面中的“Agent 分析”按钮和 `POST /api/agent-ai?project=<项目ID>`。请求体是 UTF-8 `text/plain` 任务；后端让模型从五个只读工具中自主选择，并返回 `answer`、`modelRounds`、`toolCalls` 和按执行顺序排列的 `trace`。页面展示工具名、受 160 字符限制并移除控制字符的调用参数摘要、执行成功状态与有效证据状态，不重复返回可能敏感的工具输出。空搜索和无命中 RAG 可以执行成功，但不会被当作支持最终结论的证据。页面“测试模型”按钮会显式调用 `POST /api/model-check`，只有用户点击时才发送最小连通性请求，并显示成功耗时或模型服务的结构化错误；`modelEnabled` 本身仍只代表配置完整。Agent 接口使用项目白名单、8 KiB 请求上限和共享扫描准入门禁；与 RAG 不同，模型或工具循环失败会明确返回错误，不会伪装成已完成。
 
@@ -251,7 +251,6 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 
 - 增加带审批策略的文件创建与补丁工具。
 - 扩展增量分析到更多健康规则；当前 Web 已复用未变化源码的 TODO/FIXME/HACK 解析结果，以及未变化 README 和构建清单的有效内容判断。
-- 为模型增强问答增加可选流式输出。
 - 增加可选的离线构件签名与签名密钥轮换流程。
 
 产品背景见 [docs/VISION.md](docs/VISION.md)，设计边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，威胁模型见 [docs/SECURITY.md](docs/SECURITY.md)，上线、监控、升级与回滚见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。

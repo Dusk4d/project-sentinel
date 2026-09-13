@@ -22,6 +22,8 @@ import local.agent.state.StateRunLock;
 import local.agent.state.RunAlreadyActiveException;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -94,6 +96,7 @@ public final class LocalWebServer implements AutoCloseable {
         createContext("/api/upload-analysis", this::uploadAnalysis);
         createContext("/api/rag", this::rag);
         createContext("/api/rag-ai", this::ragAi);
+        createContext("/api/rag-ai-stream", this::ragAiStream);
         createContext("/api/model-check", this::modelCheck);
         createContext("/api/agent-ai", this::agentAi);
         createContext("/api/agent-state", this::agentState);
@@ -311,6 +314,61 @@ public final class LocalWebServer implements AutoCloseable {
             send(exchange, 500, "application/json; charset=utf-8",
                     "{\"error\":" + JsonReportWriter.quote(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()) + "}\n");
         }
+    }
+
+    private void ragAiStream(HttpExchange exchange) throws IOException {
+        if (!exactPath(exchange, "/api/rag-ai-stream")) { notFound(exchange); return; }
+        if (!method(exchange, "POST")) return;
+        String contentType = exchange.getRequestHeaders().getFirst("Content-Type");
+        if (contentType == null || !contentType.toLowerCase(java.util.Locale.ROOT).startsWith("text/plain")) {
+            send(exchange, 415, "application/json; charset=utf-8", "{\"error\":\"Content-Type must be text/plain\"}\n");
+            return;
+        }
+        if (modelConfig == null) {
+            send(exchange, 503, "application/json; charset=utf-8", "{\"error\":\"model enhancement is not configured\"}\n");
+            return;
+        }
+        var lease = scanGate.tryAcquire();
+        if (lease == null) { busy(exchange); return; }
+        try (lease) {
+            Path project = selectedProject(exchange);
+            if (project == null) {
+                send(exchange, 400, "application/json; charset=utf-8", "{\"error\":\"unknown project id\"}\n");
+                return;
+            }
+            String question = readTextBody(exchange, MAX_RAG_QUESTION_BYTES);
+            var headers = exchange.getResponseHeaders();
+            headers.set("Content-Type", "text/event-stream; charset=utf-8");
+            headers.set("Cache-Control", "no-store");
+            headers.set("X-Content-Type-Options", "nosniff");
+            headers.set("Content-Security-Policy", "default-src 'self'; connect-src 'self'");
+            exchange.sendResponseHeaders(200, 0);
+            try (var output = exchange.getResponseBody()) {
+                try {
+                    var result = new AiRagService(ragFor(project), new OpenAiCompatibleClient(modelConfig))
+                            .askStreaming(question, delta -> {
+                                try { writeSse(output, "delta", "{\"delta\":" + JsonReportWriter.quote(delta) + "}"); }
+                                catch (IOException e) { throw new UncheckedIOException(e); }
+                            });
+                    writeSse(output, "done", result.toJson().replace("\n", ""));
+                } catch (UncheckedIOException disconnected) {
+                    throw disconnected.getCause();
+                } catch (Exception failure) {
+                    writeSse(output, "error", "{\"error\":" + JsonReportWriter.quote(
+                            failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage()) + "}");
+                }
+            }
+        } catch (RequestTooLargeException tooLarge) {
+            send(exchange, 413, "application/json; charset=utf-8", "{\"error\":\"question exceeds 8 KiB limit\"}\n");
+        } catch (IllegalArgumentException invalid) {
+            send(exchange, 400, "application/json; charset=utf-8",
+                    "{\"error\":" + JsonReportWriter.quote(invalid.getMessage()) + "}\n");
+        }
+    }
+
+    private static void writeSse(OutputStream output, String event, String json) throws IOException {
+        output.write(("event: " + event + "\ndata: " + json + "\n\n").getBytes(StandardCharsets.UTF_8));
+        output.flush();
     }
 
     private void agentAi(HttpExchange exchange) throws IOException {
@@ -573,7 +631,9 @@ public final class LocalWebServer implements AutoCloseable {
             function showError(e){$('actions').replaceChildren();$('findings').innerHTML='<div class="error"></div>';$('findings').firstChild.textContent=e.message}
             async function scan(){const b=$('scan');b.disabled=true;b.textContent='扫描中…';try{const id=encodeURIComponent($('projects').value);const r=await fetch('/api/analysis?project='+id,{method:'POST'});const bundle=await r.json();if(!r.ok)throw Error(bundle.error||'扫描失败');render(bundle)}catch(e){showError(e)}finally{b.disabled=false;b.textContent='重新扫描'}}
             async function upload(file){if(file.size>20*1024*1024){showError(Error('ZIP 不能超过 20 MiB'));return}const b=$('upload');b.disabled=true;b.textContent='上传检测中…';try{const r=await fetch('/api/upload-analysis',{method:'POST',headers:{'Content-Type':'application/zip'},body:file});const bundle=await r.json();if(!r.ok)throw Error(bundle.error||'上传检测失败');render(bundle)}catch(e){showError(e)}finally{b.disabled=false;b.textContent='上传 ZIP 检测';$('zip').value=''}}
-            async function ask(){const q=$('question').value.trim();if(!q){$('rag-answer').textContent='请先输入问题。';return}const b=$('ask');b.disabled=true;b.textContent='检索中…';$('rag-answer').classList.remove('error');$('rag-answer').textContent='正在读取项目并查找证据…';$('rag-evidence').replaceChildren();try{const id=encodeURIComponent($('projects').value);const endpoint=$('ai').checked?'/api/rag-ai':'/api/rag';const r=await fetch(endpoint+'?project='+id,{method:'POST',headers:{'Content-Type':'text/plain; charset=utf-8'},body:q});const data=await r.json();if(!r.ok)throw Error(data.error||'问答失败');$('rag-answer').textContent=data.answer+(data.notice?'\\n\\n'+data.notice:'');const hits=data.evidence||[];$('rag-evidence').replaceChildren(...hits.map(hit=>{const x=document.createElement('div');x.className='evidence';const h=document.createElement('strong');h.textContent=hit.path+':'+hit.startLine+'-'+hit.endLine;const score=document.createElement('div');score.className='muted';score.textContent='相关度 '+Number(hit.score).toFixed(3);const body=document.createElement('div');body.className='answer';body.textContent=hit.text;x.append(h,score,body);return x}))}catch(e){$('rag-answer').textContent=e.message;$('rag-answer').classList.add('error')}finally{b.disabled=false;b.textContent='问项目'}}
+            function renderEvidence(hits){$('rag-evidence').replaceChildren(...hits.map(hit=>{const x=document.createElement('div');x.className='evidence';const h=document.createElement('strong');h.textContent=hit.path+':'+hit.startLine+'-'+hit.endLine;const score=document.createElement('div');score.className='muted';score.textContent='相关度 '+Number(hit.score).toFixed(3);const body=document.createElement('div');body.className='answer';body.textContent=hit.text;x.append(h,score,body);return x}))}
+            async function askStream(id,q){const r=await fetch('/api/rag-ai-stream?project='+id,{method:'POST',headers:{'Content-Type':'text/plain; charset=utf-8'},body:q});if(!r.ok){const d=await r.json();throw Error(d.error||'流式问答失败')}if(!r.body)throw Error('浏览器不支持流式响应');const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='',answer='',completed=false;const handle=block=>{let event='',data='';for(const line of block.split('\\n')){if(line.startsWith('event:'))event=line.slice(6).trim();else if(line.startsWith('data:'))data+=line.slice(5).trim()}if(!data)return;if(event==='delta'){answer+=JSON.parse(data).delta;$('rag-answer').textContent=answer}else if(event==='done'){const result=JSON.parse(data);$('rag-answer').textContent=result.answer+(result.notice?'\\n\\n'+result.notice:'');renderEvidence(result.evidence||[]);completed=true}else if(event==='error')throw Error(JSON.parse(data).error||'流式问答失败')};while(true){const part=await reader.read();buffer+=decoder.decode(part.value||new Uint8Array(),{stream:!part.done}).replace(/\\r\\n/g,'\\n');let at;while((at=buffer.indexOf('\\n\\n'))>=0){const block=buffer.slice(0,at);buffer=buffer.slice(at+2);handle(block)}if(part.done)break}if(buffer.trim())handle(buffer);if(!completed)throw Error('流式问答未返回完成事件')}
+            async function ask(){const q=$('question').value.trim();if(!q){$('rag-answer').textContent='请先输入问题。';return}const b=$('ask');b.disabled=true;b.textContent='检索中…';$('rag-answer').classList.remove('error');$('rag-answer').textContent='正在读取项目并查找证据…';$('rag-evidence').replaceChildren();try{const id=encodeURIComponent($('projects').value);if($('ai').checked){$('rag-answer').textContent='正在检索证据并等待模型首个片段…';await askStream(id,q)}else{const r=await fetch('/api/rag?project='+id,{method:'POST',headers:{'Content-Type':'text/plain; charset=utf-8'},body:q});const data=await r.json();if(!r.ok)throw Error(data.error||'问答失败');$('rag-answer').textContent=data.answer+(data.notice?'\\n\\n'+data.notice:'');renderEvidence(data.evidence||[])}}catch(e){$('rag-answer').textContent=e.message;$('rag-answer').classList.add('error')}finally{b.disabled=false;b.textContent='RAG 问答'}}
             function download(){if(!latest)return;const safe=(latest.report.project||'project').replace(/[^a-zA-Z0-9._-]+/g,'-');const blob=new Blob([JSON.stringify(latest,null,2)+'\\n'],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=safe+'-sentinel-analysis.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),0)}
             async function init(){try{const r=await fetch('/api/projects');const d=await r.json();$('catalog').textContent=d.truncated?'项目超过 '+d.maximumProjects+' 个，仅显示前 '+d.maximumProjects+' 个；请缩小启动工作区。':'';$('ai').disabled=!d.modelEnabled;$('model-state').textContent=d.modelEnabled?'（已配置，勾选后启用）':'（未配置模型，使用本地抽取式回答）';$('projects').replaceChildren(...d.projects.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.name;return o}));$('projects').addEventListener('change',scan);await scan()}catch(e){$('project').textContent='后端连接失败';$('findings').textContent=e.message}}
             $('scan').addEventListener('click',scan);$('ask').addEventListener('click',ask);$('question').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});$('upload').addEventListener('click',()=>$('zip').click());$('zip').addEventListener('change',()=>{if($('zip').files[0])upload($('zip').files[0])});$('download').addEventListener('click',download);init();

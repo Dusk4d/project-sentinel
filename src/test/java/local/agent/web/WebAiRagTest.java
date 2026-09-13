@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -88,6 +89,36 @@ final class WebAiRagTest {
             assertTrue(response.body().contains("\"modelUsed\": true"));
             assertTrue(response.body().contains("请运行脚本"));
             assertTrue(response.body().contains("\"path\":\"README.md\""));
+        } finally { model.stop(0); }
+    }
+
+    @Test void streamsModelDeltasAndFinishesWithGroundedResult() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "使用 start-web.cmd 启动。", StandardCharsets.UTF_8);
+        var request = new AtomicReference<String>();
+        var model = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        model.createContext("/chat/completions", exchange -> {
+            request.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] bytes = ("data: {\"choices\":[{\"delta\":{\"content\":\"运行 \"}}]}\n\n"
+                    + "data: {\"choices\":[{\"delta\":{\"content\":\"start-web.cmd\"}}]}\n\n"
+                    + "data: [DONE]\n\n").getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, 0);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        model.start();
+        var config = new ModelConfig(URI.create("http://127.0.0.1:" + model.getAddress().getPort() + "/chat/completions"),
+                "test", "", Duration.ofSeconds(3));
+        try (var web = new LocalWebServer(workspace, 0, config); var client = HttpClient.newHttpClient()) {
+            web.start();
+            var response = post(client, web.url() + "api/rag-ai-stream", "如何启动？");
+            assertEquals(200, response.statusCode());
+            assertTrue(response.headers().firstValue("Content-Type").orElseThrow().startsWith("text/event-stream"));
+            assertTrue(response.body().contains("event: delta\ndata: {\"delta\":\"运行 \"}"));
+            assertTrue(response.body().contains("event: delta\ndata: {\"delta\":\"start-web.cmd\"}"));
+            assertTrue(response.body().contains("event: done"));
+            assertTrue(response.body().contains("\"modelUsed\": true"));
+            assertTrue(response.body().contains("\"path\":\"README.md\""));
+            assertTrue(request.get().contains("\"stream\":true"));
         } finally { model.stop(0); }
     }
 

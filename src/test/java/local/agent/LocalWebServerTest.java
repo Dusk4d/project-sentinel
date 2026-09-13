@@ -37,9 +37,9 @@ final class LocalWebServerTest {
             assertTrue(page.body().contains("-sentinel-analysis.json"));
             assertTrue(page.body().contains("项目智能助手"));
             assertTrue(page.body().contains("id=\"question\""));
-            assertTrue(page.body().contains("'/api/rag'"));
+            assertTrue(page.body().contains("'/api/rag?project='"));
             assertTrue(page.body().contains("id=\"ai\" type=\"checkbox\" disabled"));
-            assertTrue(page.body().contains("'/api/rag-ai'"));
+            assertTrue(page.body().contains("'/api/rag-ai-stream?project='"));
             assertTrue(page.body().contains("id=\"agent\" disabled>Agent 分析"));
             assertTrue(page.body().contains("/api/agent-ai"));
 
