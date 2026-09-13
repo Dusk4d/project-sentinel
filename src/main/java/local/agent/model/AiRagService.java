@@ -5,6 +5,7 @@ import local.agent.rag.RagAnswer;
 import local.agent.rag.RagHit;
 
 import java.io.IOException;
+import java.util.function.Consumer;
 
 public final class AiRagService {
     private static final String SYSTEM = """
@@ -30,6 +31,24 @@ public final class AiRagService {
             Thread.currentThread().interrupt();
             return new AiRagResult(retrieved.answer(), false, "模型调用被中断，已降级为本地抽取式回答", retrieved);
         } catch (IOException | RuntimeException e) {
+            return new AiRagResult(retrieved.answer(), false, "模型不可用，已降级为本地抽取式回答：" + safeReason(e), retrieved);
+        }
+    }
+
+    public AiRagResult askStreaming(String question, Consumer<String> onDelta) throws IOException {
+        if (onDelta == null) throw new IllegalArgumentException("流式回调不能为空");
+        RagAnswer retrieved = rag.ask(question);
+        if (retrieved.evidence().isEmpty()) {
+            onDelta.accept(retrieved.answer());
+            return new AiRagResult(retrieved.answer(), false, "没有检索证据，未调用模型", retrieved);
+        }
+        try {
+            String answer = model.completeStreaming(SYSTEM, prompt(question, retrieved), onDelta);
+            return new AiRagResult(answer, true, "", retrieved);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new AiRagResult(retrieved.answer(), false, "模型调用被中断，已降级为本地抽取式回答", retrieved);
+        } catch (IOException e) {
             return new AiRagResult(retrieved.answer(), false, "模型不可用，已降级为本地抽取式回答：" + safeReason(e), retrieved);
         }
     }

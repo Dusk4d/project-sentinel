@@ -13,6 +13,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,6 +42,24 @@ final class AiRagServiceTest {
             assertFalse(result.modelUsed());
             assertTrue(result.notice().contains("HTTP 503"));
             assertTrue(result.answer().contains("start-web.cmd"));
+        } finally { server.stop(0); }
+    }
+
+    @Test void streamsGroundedModelDeltasAndKeepsRetrievalEvidence() throws Exception {
+        Files.writeString(project.resolve("README.md"), "使用 start-web.cmd 启动。", StandardCharsets.UTF_8);
+        var prompt = new AtomicReference<String>();
+        var server = server(200, "data: {\"choices\":[{\"delta\":{\"content\":\"运行 \"}}]}\n\n"
+                + "data: {\"choices\":[{\"delta\":{\"content\":\"start-web.cmd\"}}]}\n\n"
+                + "data: [DONE]\n\n", prompt);
+        try {
+            var deltas = new ArrayList<String>();
+            var result = service(server).askStreaming("如何启动？", deltas::add);
+            assertTrue(result.modelUsed());
+            assertEquals("运行 start-web.cmd", result.answer());
+            assertEquals(List.of("运行 ", "start-web.cmd"), deltas);
+            assertFalse(result.retrieval().evidence().isEmpty());
+            assertTrue(prompt.get().contains("\"stream\":true"));
+            assertTrue(prompt.get().contains("BEGIN EVIDENCE README.md:1-1"));
         } finally { server.stop(0); }
     }
 
