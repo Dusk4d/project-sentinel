@@ -145,6 +145,13 @@ java -jar target/workspace-agent-0.3.0.jar --validate-config D:\path\to\project
 
 # 列出可用于禁用和豁免的全部稳定规则 ID
 java -jar target/workspace-agent-0.3.0.jar --list-rules
+
+# 离线生成 Ed25519 密钥；轮换时使用新的 keyId，绝不覆盖旧密钥
+java -jar target/workspace-agent-0.3.0.jar --generate-signing-key D:\secure\sentinel-keys 2026-09-a
+
+# 为发布构件创建不可覆盖的脱机签名，并用可分发公钥验证
+java -jar target/workspace-agent-0.3.0.jar --sign-artifact target\project-sentinel-0.3.0-distribution.zip D:\secure\sentinel-keys\private-2026-09-a.pk8 2026-09-a target\project-sentinel-0.3.0-distribution.zip.sig
+java -jar target/workspace-agent-0.3.0.jar --verify-signature target\project-sentinel-0.3.0-distribution.zip D:\secure\sentinel-keys\public-2026-09-a.x509 target\project-sentinel-0.3.0-distribution.zip.sig
 ```
 
 使用 `--help` 查看完整命令，使用 `--version` 查看版本。未知选项、缺少参数或多余参数会输出帮助并返回退出码 `2`；所有参数都必须被明确消费，避免定时脚本的拼写错误被静默忽略。
@@ -251,7 +258,6 @@ waiver.legal.license=2026-12-31|alice|等待组织确认许可证
 
 - 增加带审批策略的文件创建与补丁工具。
 - 扩展增量分析到更多健康规则；当前 Web 已复用未变化源码的 TODO/FIXME/HACK 解析结果，以及未变化 README 和构建清单的有效内容判断。
-- 增加可选的离线构件签名与签名密钥轮换流程。
 
 产品背景见 [docs/VISION.md](docs/VISION.md)，设计边界见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，威胁模型见 [docs/SECURITY.md](docs/SECURITY.md)，上线、监控、升级与回滚见 [docs/OPERATIONS.md](docs/OPERATIONS.md)。
 

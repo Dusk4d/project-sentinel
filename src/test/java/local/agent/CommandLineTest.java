@@ -29,12 +29,16 @@ final class CommandLineTest {
         assertTrue(CommandLine.validate(new String[]{"--init-config", "project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--validate-config", "project"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--list-rules"}).isEmpty());
+        assertTrue(CommandLine.validate(new String[]{"--generate-signing-key", "keys", "2026-a"}).isEmpty());
+        assertTrue(CommandLine.validate(new String[]{"--sign-artifact", "app.zip", "private.pk8", "2026-a", "app.sig"}).isEmpty());
+        assertTrue(CommandLine.validate(new String[]{"--verify-signature", "app.zip", "public.x509", "app.sig"}).isEmpty());
         assertTrue(CommandLine.validate(new String[]{"--help"}).isEmpty());
         assertTrue(CommandLine.usage().contains("--check-json <项目>"));
         assertTrue(CommandLine.usage().contains("--call <工作区> <工具名> <输入>"));
         assertTrue(CommandLine.usage().contains("--ask-ai <工作区> <问题>"));
         assertTrue(CommandLine.usage().contains("--agent-ai <工作区> <任务>"));
         assertTrue(CommandLine.usage().contains("--agent-ai-memory <工作区> <状态目录> <任务>"));
+        assertTrue(CommandLine.usage().contains("--verify-signature <构件> <公钥> <签名文件>"));
     }
 
     @Test void rejectsUnknownMissingAndUnexpectedArguments() {

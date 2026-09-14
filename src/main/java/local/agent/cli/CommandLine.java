@@ -54,6 +54,9 @@ public final class CommandLine {
                   java -jar workspace-agent.jar --init-config <项目>
                   java -jar workspace-agent.jar --validate-config <项目>
                   java -jar workspace-agent.jar --list-rules
+                  java -jar workspace-agent.jar --generate-signing-key <密钥目录> <keyId>
+                  java -jar workspace-agent.jar --sign-artifact <构件> <私钥> <keyId> <签名文件>
+                  java -jar workspace-agent.jar --verify-signature <构件> <公钥> <签名文件>
                   java -jar workspace-agent.jar --help
                   java -jar workspace-agent.jar --version
                 """.formatted(VERSION);
@@ -86,6 +89,9 @@ public final class CommandLine {
         result.put("--init-config", exact(2));
         result.put("--validate-config", exact(2));
         result.put("--list-rules", exact(1));
+        result.put("--generate-signing-key", exact(3));
+        result.put("--sign-artifact", exact(5));
+        result.put("--verify-signature", exact(4));
         result.put("--help", exact(1));
         result.put("--version", exact(1));
         return Map.copyOf(result);

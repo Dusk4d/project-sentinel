@@ -40,6 +40,7 @@ import local.agent.model.ToolCallingAgentService;
 import local.agent.model.AgentMemoryEntry;
 import local.agent.model.AgentMemoryStore;
 import local.agent.model.AgentCheckpointStore;
+import local.agent.release.ArtifactSigner;
 
 public final class Main {
     public static void main(String[] args) {
@@ -56,6 +57,18 @@ public final class Main {
         }
         if (args.length == 1 && args[0].equals("--version")) {
             System.out.println("Project Sentinel " + CommandLine.VERSION);
+            return;
+        }
+        if (args.length == 3 && args[0].equals("--generate-signing-key")) {
+            runGenerateSigningKey(Path.of(args[1]), args[2]);
+            return;
+        }
+        if (args.length == 5 && args[0].equals("--sign-artifact")) {
+            runSignArtifact(Path.of(args[1]), Path.of(args[2]), args[3], Path.of(args[4]));
+            return;
+        }
+        if (args.length == 4 && args[0].equals("--verify-signature")) {
+            runVerifySignature(Path.of(args[1]), Path.of(args[2]), Path.of(args[3]));
             return;
         }
         if (args.length == 2 && args[0].equals("--tools-json")) {
@@ -190,6 +203,43 @@ public final class Main {
     private static void configureUtf8Console() {
         System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
         System.setErr(new PrintStream(System.err, true, StandardCharsets.UTF_8));
+    }
+
+    private static void runGenerateSigningKey(Path directory, String keyId) {
+        try {
+            var keys = new ArtifactSigner().generate(directory, keyId);
+            System.out.println("私钥已创建: " + keys.privateKey());
+            System.out.println("公钥已创建: " + keys.publicKey());
+            System.out.println("请离线备份私钥并仅分发公钥；轮换时使用新的 keyId。\n");
+        } catch (IllegalArgumentException e) {
+            System.err.println("参数错误: " + e.getMessage()); System.exit(2);
+        } catch (Exception e) {
+            System.err.println("密钥生成失败: " + e.getMessage()); System.exit(1);
+        }
+    }
+
+    private static void runSignArtifact(Path artifact, Path privateKey, String keyId, Path signature) {
+        try {
+            Path saved = new ArtifactSigner().sign(artifact, privateKey, keyId, signature);
+            System.out.println("Ed25519 签名已保存: " + saved);
+        } catch (IllegalArgumentException e) {
+            System.err.println("参数错误: " + e.getMessage()); System.exit(2);
+        } catch (Exception e) {
+            System.err.println("构件签名失败: " + e.getMessage()); System.exit(1);
+        }
+    }
+
+    private static void runVerifySignature(Path artifact, Path publicKey, Path signature) {
+        try {
+            var result = new ArtifactSigner().verify(artifact, publicKey, signature);
+            System.out.println("状态: " + (result.valid() ? "VALID" : "INVALID"));
+            System.out.println("keyId: " + result.keyId());
+            System.out.println("SHA-256: " + result.artifactSha256());
+            System.out.println(result.message());
+            if (!result.valid()) System.exit(7);
+        } catch (Exception e) {
+            System.err.println("签名验证失败: " + e.getMessage()); System.exit(1);
+        }
     }
 
     private static void runCheck(Path project) {
