@@ -3,6 +3,7 @@ package local.agent;
 import local.agent.web.LocalWebServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.Assumptions;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -16,6 +17,38 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class LocalWebServerTest {
     @TempDir Path project;
+
+    @Test void embeddedDashboardScriptParsesWhenNodeIsAvailable() throws Exception {
+        Files.writeString(project.resolve("README.md"), "# Dashboard test");
+        try (var server = new LocalWebServer(project, 0); var client = HttpClient.newHttpClient()) {
+            server.start();
+            var response = client.send(HttpRequest.newBuilder(URI.create(server.url())).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, response.statusCode());
+            String html = response.body();
+            int start = html.indexOf("<script>");
+            int end = html.lastIndexOf("</script>");
+            assertTrue(start >= 0 && end > start, "dashboard must contain an inline script");
+            String script = html.substring(start + "<script>".length(), end);
+            Process parser;
+            try { parser = new ProcessBuilder("node", "--check", "-").redirectErrorStream(true).start(); }
+            catch (java.io.IOException unavailable) {
+                Assumptions.abort("Node.js is not installed; dashboard syntax check skipped");
+                return;
+            }
+            try {
+                try (var input = parser.getOutputStream()) { input.write(script.getBytes(StandardCharsets.UTF_8)); }
+                if (!parser.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                    parser.destroyForcibly();
+                    fail("Node.js dashboard syntax check timed out");
+                }
+                String diagnostics = new String(parser.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                assertEquals(0, parser.exitValue(), diagnostics);
+            } finally {
+                if (parser.isAlive()) parser.destroyForcibly();
+            }
+        }
+    }
 
     @Test void servesUtf8DashboardHealthAndLiveReportOnLoopback() throws Exception {
         Files.writeString(project.resolve("README.md"), "# 示例");
