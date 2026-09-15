@@ -96,6 +96,42 @@ final class UploadAnalysisWebTest {
         }
     }
 
+    @Test void replacingUploadSwitchesAnalysisAndRagAndRemovesOldTemporaryProject() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "# Host workspace");
+        byte[] first = archive("first/README.md", "# Alpha-only project",
+                "first/pom.xml", "<project>alpha</project>");
+        byte[] second = archive("second/README.md", "# Beta-only project",
+                "second/pom.xml", "<project>beta</project>");
+        try (var server = new LocalWebServer(workspace, 0); var client = HttpClient.newHttpClient()) {
+            server.start();
+            for (byte[] zip : new byte[][] { first, second }) {
+                var uploaded = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/upload-analysis"))
+                                .header("Content-Type", "application/zip")
+                                .POST(HttpRequest.BodyPublishers.ofByteArray(zip)).build(),
+                        HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                assertEquals(200, uploaded.statusCode(), uploaded.body());
+                try (var children = Files.list(workspace)) {
+                    assertEquals(1, children.filter(path -> path.getFileName().toString().startsWith(".sentinel-upload-")).count());
+                }
+            }
+            var analysis = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/analysis?project=upload"))
+                            .POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, analysis.statusCode(), analysis.body());
+            assertTrue(analysis.body().contains("\"project\": \"second\""));
+            var rag = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/rag?project=upload"))
+                            .header("Content-Type", "text/plain; charset=utf-8")
+                            .POST(HttpRequest.BodyPublishers.ofString("Beta-only project")).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, rag.statusCode(), rag.body());
+            assertTrue(rag.body().contains("Beta-only project"));
+            assertFalse(rag.body().contains("Alpha-only project"));
+        }
+        try (var children = Files.list(workspace)) {
+            assertFalse(children.anyMatch(path -> path.getFileName().toString().startsWith(".sentinel-upload-")));
+        }
+    }
+
     private static byte[] archive(String... nameAndContent) throws Exception {
         var bytes = new ByteArrayOutputStream();
         try (var zip = new ZipOutputStream(bytes)) {
