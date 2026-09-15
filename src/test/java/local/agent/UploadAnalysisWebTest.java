@@ -3,6 +3,7 @@ package local.agent;
 import local.agent.web.LocalWebServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.Assumptions;
 
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
@@ -63,6 +64,35 @@ final class UploadAnalysisWebTest {
                             .header("Content-Type", "text/plain").POST(HttpRequest.BodyPublishers.ofString("x")).build(),
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             assertEquals(415, response.statusCode());
+        }
+    }
+
+    @Test void optionallyUploadsRealZipThroughHttpAndAnalyzesIt() throws Exception {
+        String supplied = System.getProperty("sentinel.external.zip");
+        Assumptions.assumeTrue(supplied != null && !supplied.isBlank(), "no external ZIP supplied");
+        Path source = Path.of(supplied);
+        Assumptions.assumeTrue(Files.isRegularFile(source), "external ZIP is missing");
+        Files.writeString(workspace.resolve("README.md"), "# Host workspace");
+        try (var server = new LocalWebServer(workspace, 0); var client = HttpClient.newHttpClient()) {
+            server.start();
+            var request = HttpRequest.newBuilder(URI.create(server.url() + "api/upload-analysis"))
+                    .header("Content-Type", "application/zip")
+                    .POST(HttpRequest.BodyPublishers.ofInputStream(() -> {
+                        try { return Files.newInputStream(source); }
+                        catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+                    })).build();
+            var response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, response.statusCode(), response.body());
+            assertTrue(response.body().contains("\"projectId\":\"upload\""));
+            assertTrue(response.body().contains("\"temporary\":true"));
+            assertTrue(response.body().contains("\"report\""));
+            var catalog = client.send(HttpRequest.newBuilder(URI.create(server.url() + "api/projects")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(200, catalog.statusCode());
+            assertTrue(catalog.body().contains("\"id\":\"upload\""));
+        }
+        try (var children = Files.list(workspace)) {
+            assertFalse(children.anyMatch(path -> path.getFileName().toString().startsWith(".sentinel-upload-")));
         }
     }
 
