@@ -45,6 +45,7 @@ public final class LocalRagService {
         List<Chunk> chunks = snapshot.chunks();
         QueryIntent intent = QueryIntent.classify(query);
         List<String> signalTerms = signalTerms(query);
+        List<String> specificTerms = intent.specificTerms(query);
         List<String> queryTerms = queryTerms(query, intent);
         if (queryTerms.isEmpty() || chunks.isEmpty()) return noEvidence(query, snapshot);
 
@@ -56,7 +57,7 @@ public final class LocalRagService {
         List<ScoredChunk> ranked = chunks.stream()
                 .map(chunk -> new ScoredChunk(chunk, score(chunk, queryTerms, documentFrequency,
                         chunks.size(), averageLength, intent)))
-                .filter(scored -> scored.score() > 0.0 && relevant(scored.chunk(), signalTerms, intent))
+                .filter(scored -> scored.score() > 0.0 && relevant(scored.chunk(), signalTerms, specificTerms, intent))
                 .sorted(Comparator.comparingDouble(ScoredChunk::score).reversed()
                         .thenComparing(scored -> scored.chunk().path()).thenComparingInt(scored -> scored.chunk().startLine()))
                 .toList();
@@ -179,8 +180,13 @@ public final class LocalRagService {
                 .distinct().toList();
     }
 
-    private boolean relevant(Chunk chunk, List<String> signalTerms, QueryIntent intent) {
-        if (intent != QueryIntent.GENERAL) return true;
+    private boolean relevant(Chunk chunk, List<String> signalTerms, List<String> specificTerms, QueryIntent intent) {
+        if (intent != QueryIntent.GENERAL) {
+            if (specificTerms.isEmpty()) return true;
+            Set<String> terms = new HashSet<>(chunk.terms());
+            long matched = specificTerms.stream().filter(terms::contains).count();
+            return matched > 0 && matched * 2 >= specificTerms.size();
+        }
         if (signalTerms.isEmpty()) return false;
         Set<String> terms = new HashSet<>(chunk.terms());
         return signalTerms.stream().anyMatch(terms::contains);
@@ -240,6 +246,26 @@ public final class LocalRagService {
             if (containsAny(text, "技术栈", "框架", "依赖", "technology", "framework", "dependency")) return TECHNOLOGY;
             if (containsAny(text, "测试", "覆盖率", "test", "coverage")) return TESTING;
             return GENERAL;
+        }
+
+        List<String> specificTerms(String question) {
+            if (this == GENERAL) return List.of();
+            String remaining = question.toLowerCase(Locale.ROOT);
+            String[] cues = switch (this) {
+                case OVERVIEW -> new String[] {"主要功能", "核心功能", "项目介绍", "项目简介", "项目是什么", "做什么", "功能", "overview", "purpose", "what is this project", "what does this project"};
+                case STARTUP -> new String[] {"怎么启动", "如何启动", "怎么运行", "如何运行", "启动", "运行", "安装", "部署", "start", "run", "launch", "install"};
+                case ARCHITECTURE -> new String[] {"架构", "模块", "组件", "分层", "architecture", "module", "component"};
+                case TECHNOLOGY -> new String[] {"技术栈", "框架", "依赖", "technology", "framework", "dependency"};
+                case TESTING -> new String[] {"覆盖率", "测试", "验证", "coverage", "test"};
+                case GENERAL -> new String[0];
+            };
+            for (String cue : cues) remaining = remaining.replace(cue, " ");
+            for (String filler : new String[] {"这个项目", "该项目", "项目", "这个", "是什么", "有哪些", "是否", "如何", "怎么", "怎么样", "哪里", "在哪", "的", "中", "里", "吗", "呢", "what", "how", "where", "this", "project", "the", "is", "of"})
+                remaining = remaining.replace(filler, " ");
+            return tokens(remaining).stream()
+                    .filter(term -> term.codePointCount(0, term.length()) >= 2)
+                    .filter(term -> !QUERY_STOP_TERMS.contains(term))
+                    .distinct().toList();
         }
 
         double adjust(Chunk chunk, double lexical) {

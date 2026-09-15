@@ -66,6 +66,21 @@ final class LocalRagServiceTest {
         assertEquals("PaymentService.java", answer.evidence().get(0).path());
     }
 
+    @Test void abstainsWhenBroadIntentQuestionNamesAnUnsupportedSpecificModule() throws Exception {
+        Files.writeString(workspace.resolve("README.md"), "# Finance Agent\n主要功能是预算管理与风险提示。\n");
+        var rag = new LocalRagService(new WorkspaceGuard(workspace));
+
+        var broad = rag.ask("这个项目主要功能是什么？");
+        assertFalse(broad.evidence().isEmpty());
+
+        var supported = rag.ask("这个项目主要功能中的预算管理是什么？");
+        assertFalse(supported.evidence().isEmpty(), "已有证据的具体功能仍应可检索");
+
+        var unsupported = rag.ask("这个项目主要功能中的量子计算模块是什么？");
+        assertTrue(unsupported.evidence().isEmpty(), "意图扩展和 README 加分不能代替用户点名的模块证据");
+        assertTrue(unsupported.answer().contains("没有找到足以支持回答"));
+    }
+
     @Test void refusesUnrelatedQuestionInsteadOfReturningWeakCharacterOverlap() throws Exception {
         Files.writeString(workspace.resolve("README.md"), "# 项目说明\n如何启动服务：运行 start-web.cmd。\n支持项目健康检查。\n");
 
