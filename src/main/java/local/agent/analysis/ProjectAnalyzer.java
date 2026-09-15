@@ -48,11 +48,13 @@ public final class ProjectAnalyzer {
         var readmes = files.stream().filter(p -> p.getParent().equals(normalized))
                 .filter(this::isReadme).toList();
         boolean readme = !readmes.isEmpty();
-        boolean readmeHasContent = readmes.stream().anyMatch(path -> hasMeaningfulText(path, config.maxTextBytes()));
+        var readmeChecks = readmes.stream().map(path -> inspectMeaningfulText(path, config.maxTextBytes())).toList();
+        boolean readmeHasContent = readmeChecks.stream().anyMatch(check -> check.status() == TextStatus.MEANINGFUL);
         var buildManifests = BUILD_MANIFEST_NAMES.stream().map(normalized::resolve)
                 .filter(path -> isSafeRegularFile(normalized, path)).toList();
         boolean buildManifestPresent = !buildManifests.isEmpty();
-        boolean build = buildManifests.stream().anyMatch(path -> hasMeaningfulText(path, config.maxTextBytes()));
+        var manifestChecks = buildManifests.stream().map(path -> inspectMeaningfulText(path, config.maxTextBytes())).toList();
+        boolean build = manifestChecks.stream().anyMatch(check -> check.status() == TextStatus.MEANINGFUL);
         pruneMeaningfulTextCache(normalized, readmes, buildManifests);
         boolean gitIgnore = Files.isRegularFile(normalized.resolve(".gitignore"));
         boolean license = files.stream().anyMatch(p -> p.getParent().equals(normalized)
@@ -65,10 +67,18 @@ public final class ProjectAnalyzer {
 
         List<Finding> findings = new ArrayList<>();
         if (!readme) add(config, findings, new Finding(RuleCatalog.DOCS_README, Severity.MEDIUM, "文档", "缺少 README，项目目标和运行方式不可发现", "项目根目录未发现 README*", "补充目标、安装、运行和测试说明"));
+        else if (!readmeHasContent && readmeChecks.stream().anyMatch(check -> check.status() == TextStatus.UNVERIFIED))
+            add(config, findings, new Finding(RuleCatalog.DOCS_README_UNVERIFIED, Severity.MEDIUM, "文档",
+                    "README 内容无法验证", "无法验证的文件：" + unverifiedPaths(readmes, readmeChecks),
+                    "缩小文件或提高 scan.maxTextBytes 后重新扫描；读取失败时检查权限或文件编码"));
         else if (!readmeHasContent) add(config, findings, new Finding(RuleCatalog.DOCS_README_EMPTY, Severity.MEDIUM, "文档",
                 "README 没有有效内容，仍无法了解项目", "项目根目录 README 文件均为空或只包含空白字符：" + readmes.stream().map(Path::getFileName).toList(),
                 "补充项目背景、安装要求、启动命令和测试方法"));
         if (!buildManifestPresent) add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST, Severity.HIGH, "可复现性", "缺少可识别的构建清单", "未发现常见构建文件", "添加与技术栈匹配的构建配置"));
+        else if (!build && manifestChecks.stream().anyMatch(check -> check.status() == TextStatus.UNVERIFIED))
+            add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST_UNVERIFIED, Severity.MEDIUM, "可复现性",
+                    "构建清单内容无法验证", "无法验证的文件：" + unverifiedPaths(buildManifests, manifestChecks),
+                    "缩小文件或提高 scan.maxTextBytes 后重新扫描；读取失败时检查权限或文件编码"));
         else if (!build) add(config, findings, new Finding(RuleCatalog.BUILD_MANIFEST_EMPTY, Severity.HIGH, "可复现性",
                 "构建清单没有有效内容，项目无法据此构建", "项目根目录构建清单均为空或只包含空白字符：" + buildManifests.stream().map(Path::getFileName).toList(),
                 "写入有效构建配置，并通过对应构建工具执行编译和测试"));
@@ -129,25 +139,36 @@ public final class ProjectAnalyzer {
         catch (IOException e) { return false; }
     }
 
-    private synchronized boolean hasMeaningfulText(Path file, long maxBytes) {
+    private synchronized TextInspection inspectMeaningfulText(Path file, long maxBytes) {
         try {
             Path real = file.toRealPath();
             BasicFileAttributes attributes = Files.readAttributes(real, BasicFileAttributes.class);
             FileStamp stamp = new FileStamp(attributes.size(), attributes.lastModifiedTime(), maxBytes);
             CachedMeaningfulText cached = meaningfulTextCache.get(real);
-            if (cached != null && cached.stamp().equals(stamp)) return cached.meaningful();
-            boolean meaningful;
-            if (attributes.size() == 0) meaningful = false;
-            else if (attributes.size() > maxBytes) meaningful = true;
+            if (cached != null && cached.stamp().equals(stamp)) return cached.inspection();
+            TextInspection inspection;
+            if (attributes.size() == 0) inspection = new TextInspection(TextStatus.EMPTY, "");
+            else if (attributes.size() > maxBytes) inspection = new TextInspection(TextStatus.UNVERIFIED,
+                    "大小 " + attributes.size() + " 字节超过读取上限 " + maxBytes + " 字节");
             else {
-                meaningful = !Files.readString(real, StandardCharsets.UTF_8).isBlank();
+                boolean meaningful = !Files.readString(real, StandardCharsets.UTF_8).isBlank();
+                inspection = new TextInspection(meaningful ? TextStatus.MEANINGFUL : TextStatus.EMPTY, "");
                 meaningfulTextFilesRead++;
             }
-            meaningfulTextCache.put(real, new CachedMeaningfulText(stamp, meaningful));
-            return meaningful;
+            meaningfulTextCache.put(real, new CachedMeaningfulText(stamp, inspection));
+            return inspection;
         } catch (IOException unreadable) {
-            return true;
+            return new TextInspection(TextStatus.UNVERIFIED, "读取或 UTF-8 解码失败");
         }
+    }
+
+    private String unverifiedPaths(List<Path> paths, List<TextInspection> checks) {
+        var evidence = new ArrayList<String>();
+        for (int index = 0; index < paths.size(); index++) {
+            if (checks.get(index).status() == TextStatus.UNVERIFIED)
+                evidence.add(paths.get(index).getFileName() + " (" + checks.get(index).reason() + ")");
+        }
+        return evidence.toString();
     }
 
     private synchronized void pruneMeaningfulTextCache(Path root, List<Path> readmes, List<Path> manifests) {
@@ -233,7 +254,9 @@ public final class ProjectAnalyzer {
     private record TodoScan(int count, List<String> locations) { }
     private record FileStamp(long size, FileTime modified, long maxTextBytes) { }
     private record CachedTodoScan(FileStamp stamp, List<Integer> lineNumbers) { }
-    private record CachedMeaningfulText(FileStamp stamp, boolean meaningful) { }
+    private enum TextStatus { MEANINGFUL, EMPTY, UNVERIFIED }
+    private record TextInspection(TextStatus status, String reason) { }
+    private record CachedMeaningfulText(FileStamp stamp, TextInspection inspection) { }
 
     private String detectEcosystem(Path root) {
         if (Files.exists(root.resolve("pom.xml"))) return "Java / Maven";

@@ -8,8 +8,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 final class RuleCatalogTest {
     @Test void definitionsHaveUniqueKnownIdsAndRenderableHelp() {
-        assertEquals(13, RuleCatalog.DEFINITIONS.size());
         assertEquals(RuleCatalog.DEFINITIONS.size(), RuleCatalog.KNOWN_IDS.size());
+        assertTrue(RuleCatalog.KNOWN_IDS.contains(RuleCatalog.DOCS_README_UNVERIFIED));
+        assertTrue(RuleCatalog.KNOWN_IDS.contains(RuleCatalog.BUILD_MANIFEST_UNVERIFIED));
         String output = new RuleCatalogWriter().render();
         for (var rule : RuleCatalog.DEFINITIONS) {
             assertTrue(output.contains(rule.id()));

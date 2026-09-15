@@ -14,9 +14,9 @@ Project Sentinel 提供可由大模型或自动化编排器消费的 Function Ca
 
 需要生成式回答时，可选的 `--ask-ai` 会把同一批本地 RAG 证据发送给 OpenAI Chat Completions 兼容端点。该功能默认关闭，不配置环境变量就不会联网；模型故障时自动降级为本地抽取式回答。远程端点强制 HTTPS，本机 Ollama、LM Studio 等回环端点可以使用 HTTP。
 
-README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_CN.md` 等分隔变体。空文件和纯空白内容会单独报告；嵌套文件或 `READMEevil.md` 一类相似前缀不能制造“文档已完成”的假象。
+README 检测只认可项目根目录中的 `README` 或 `README.md`、`README_CN.md` 等分隔变体。空文件和纯空白内容会单独报告；超过文本读取上限、无法读取或 UTF-8 解码失败时报告 `docs.readme-unverified`，不臆测其内容有效。嵌套文件或 `READMEevil.md` 一类相似前缀不能制造“文档已完成”的假象。
 
-构建能力同样要求受支持的根目录清单至少包含非空白内容；空 `pom.xml`、`package.json` 等会触发高风险 `build.manifest-empty`，且不会继续派生 CI 和依赖锁定噪声。这里只验证“具备可解析内容的前提”，真实可构建性仍应通过显式构建验证确认。
+构建能力同样要求受支持的根目录清单至少包含非空白内容；空 `pom.xml`、`package.json` 等会触发高风险 `build.manifest-empty`。超出读取上限、无法读取或解码失败的清单会报告 `build.manifest-unverified`；两种情况下都不会继续派生 CI 和依赖锁定噪声。这里只验证“具备可解析内容的前提”，真实可构建性仍应通过显式构建验证确认。
 
 ## 运行
 

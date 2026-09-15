@@ -131,6 +131,36 @@ final class ProjectAnalyzerTest {
         assertFalse(usable.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.BUILD_MANIFEST_EMPTY)));
     }
 
+    @Test void reportsOversizedOrUndecodableDocumentationAndManifestsAsUnverified() throws Exception {
+        Path readme = Files.writeString(root.resolve("README.md"), " ".repeat(1_025));
+        Path pom = Files.writeString(root.resolve("pom.xml"), " ".repeat(1_025));
+        var limited = new AnalyzerConfig(Set.of(), Set.of(), 100, 1_024, 20, ScoreWeights.DEFAULT, Map.of());
+        var analyzer = new ProjectAnalyzer();
+
+        var unknown = analyzer.analyze(root, limited);
+        assertTrue(unknown.hasReadme());
+        assertFalse(unknown.hasBuildFile());
+        assertTrue(unknown.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.DOCS_README_UNVERIFIED)
+                && f.evidence().contains("1025")));
+        assertTrue(unknown.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.BUILD_MANIFEST_UNVERIFIED)));
+        assertFalse(unknown.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.DOCS_README_EMPTY)
+                || f.ruleId().equals(RuleCatalog.BUILD_MANIFEST_EMPTY)
+                || f.ruleId().equals(RuleCatalog.AUTOMATION_CI)
+                || f.ruleId().equals(RuleCatalog.BUILD_LOCK)));
+
+        var expanded = new AnalyzerConfig(Set.of(), Set.of(), 100, 2_048, 20, ScoreWeights.DEFAULT, Map.of());
+        var verifiedEmpty = analyzer.analyze(root, expanded);
+        assertTrue(verifiedEmpty.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.DOCS_README_EMPTY)));
+        assertTrue(verifiedEmpty.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.BUILD_MANIFEST_EMPTY)));
+
+        Files.write(readme, new byte[] { (byte) 0xC3, (byte) 0x28 });
+        Files.writeString(pom, "<project/>");
+        var undecodable = analyzer.analyze(root, expanded);
+        assertTrue(undecodable.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.DOCS_README_UNVERIFIED)
+                && f.evidence().contains("UTF-8")));
+        assertTrue(undecodable.hasBuildFile());
+    }
+
     @Test void reportsMissingCiAndRecognizesGithubWorkflowWithoutReadingIt() throws Exception {
         Files.writeString(root.resolve("pom.xml"), "<project/>");
         var missing = new ProjectAnalyzer().analyze(root);
