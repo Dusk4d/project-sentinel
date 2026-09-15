@@ -120,12 +120,15 @@ public final class LocalWebServer implements AutoCloseable {
 
     private void createContext(String path, HttpHandler handler) {
         server.createContext(path, exchange -> {
-            if (!allowedHost(exchange.getRequestHeaders().getFirst("Host"))) {
+            String requestHost = exchange.getRequestHeaders().getFirst("Host");
+            if (!allowedHost(requestHost)) {
                 send(exchange, 403, "application/json; charset=utf-8", "{\"error\":\"invalid host\"}\n");
                 return;
             }
             String origin = exchange.getRequestHeaders().getFirst("Origin");
-            if (origin != null && !allowedOrigin(origin, port())) {
+            String fetchSite = exchange.getRequestHeaders().getFirst("Sec-Fetch-Site");
+            if ((origin != null && !allowedOrigin(origin, requestHost, port()))
+                    || !allowedFetchSite(fetchSite)) {
                 send(exchange, 403, "application/json; charset=utf-8", "{\"error\":\"cross-origin request denied\"}\n");
                 return;
             }
@@ -143,22 +146,27 @@ public final class LocalWebServer implements AutoCloseable {
         return name.equals("127.0.0.1") || name.equals("localhost");
     }
 
-    static boolean allowedOrigin(String value, int serverPort) {
-        if (value == null || value.isBlank() || value.equalsIgnoreCase("null")) return false;
+    static boolean allowedOrigin(String value, String requestHost, int serverPort) {
+        if (value == null || value.isBlank() || value.equalsIgnoreCase("null") || !allowedHost(requestHost)) return false;
         try {
             URI origin = URI.create(value.strip());
+            URI requested = URI.create("http://" + requestHost.strip());
             if (!"http".equalsIgnoreCase(origin.getScheme()) || origin.getUserInfo() != null
                     || origin.getQuery() != null || origin.getFragment() != null) return false;
             String path = origin.getPath();
             if (path != null && !path.isEmpty()) return false;
-            String host = origin.getHost();
-            if (host == null || !(host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1")
-                    || host.equals("::1") || host.equals("[::1]")))
-                return false;
-            return (origin.getPort() < 0 ? 80 : origin.getPort()) == serverPort;
+            if (requested.getHost() == null || origin.getHost() == null
+                    || !origin.getHost().equalsIgnoreCase(requested.getHost())) return false;
+            int originPort = origin.getPort() < 0 ? 80 : origin.getPort();
+            int requestPort = requested.getPort() < 0 ? 80 : requested.getPort();
+            return originPort == serverPort && requestPort == serverPort;
         } catch (IllegalArgumentException malformed) {
             return false;
         }
+    }
+
+    static boolean allowedFetchSite(String value) {
+        return value == null || value.equalsIgnoreCase("none") || value.equalsIgnoreCase("same-origin");
     }
 
     private static boolean validPortSuffix(String suffix) {

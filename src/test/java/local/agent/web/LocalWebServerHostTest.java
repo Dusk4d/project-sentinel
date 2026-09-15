@@ -50,14 +50,22 @@ final class LocalWebServerHostTest {
     }
 
     @Test void acceptsOnlySameLoopbackOriginAndPort() {
-        assertTrue(LocalWebServer.allowedOrigin("http://127.0.0.1:8787", 8787));
-        assertTrue(LocalWebServer.allowedOrigin("http://localhost:8787", 8787));
-        assertTrue(LocalWebServer.allowedOrigin("http://[::1]:8787", 8787));
-        assertFalse(LocalWebServer.allowedOrigin("https://127.0.0.1:8787", 8787));
-        assertFalse(LocalWebServer.allowedOrigin("http://127.0.0.1:9999", 8787));
-        assertFalse(LocalWebServer.allowedOrigin("http://evil.example", 8787));
-        assertFalse(LocalWebServer.allowedOrigin("null", 8787));
-        assertFalse(LocalWebServer.allowedOrigin("not a URI", 8787));
+        assertTrue(LocalWebServer.allowedOrigin("http://127.0.0.1:8787", "127.0.0.1:8787", 8787));
+        assertTrue(LocalWebServer.allowedOrigin("http://localhost:8787", "localhost:8787", 8787));
+        assertTrue(LocalWebServer.allowedOrigin("http://[::1]:8787", "[::1]:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("http://localhost:8787", "127.0.0.1:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("http://[::1]:8787", "127.0.0.1:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("http://127.0.0.1:8787", "127.0.0.1:9999", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("https://127.0.0.1:8787", "127.0.0.1:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("http://127.0.0.1:9999", "127.0.0.1:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("http://evil.example", "127.0.0.1:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("null", "127.0.0.1:8787", 8787));
+        assertFalse(LocalWebServer.allowedOrigin("not a URI", "127.0.0.1:8787", 8787));
+        assertTrue(LocalWebServer.allowedFetchSite(null));
+        assertTrue(LocalWebServer.allowedFetchSite("same-origin"));
+        assertTrue(LocalWebServer.allowedFetchSite("none"));
+        assertFalse(LocalWebServer.allowedFetchSite("same-site"));
+        assertFalse(LocalWebServer.allowedFetchSite("cross-site"));
     }
 
     @Test void rejectsCrossOriginBrowserRequestsBeforeRouting() throws Exception {
@@ -71,6 +79,18 @@ final class LocalWebServerHostTest {
                     java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             assertEquals(403, denied.statusCode());
             assertTrue(denied.body().contains("cross-origin"));
+
+            var alias = client.send(java.net.http.HttpRequest.newBuilder(endpoint)
+                            .header("Origin", "http://localhost:" + server.port())
+                            .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(403, alias.statusCode());
+
+            var fetchMetadata = client.send(java.net.http.HttpRequest.newBuilder(endpoint)
+                            .header("Sec-Fetch-Site", "cross-site")
+                            .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            assertEquals(403, fetchMetadata.statusCode());
 
             var allowed = client.send(java.net.http.HttpRequest.newBuilder(endpoint)
                             .header("Origin", server.url().substring(0, server.url().length() - 1))
