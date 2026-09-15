@@ -2,6 +2,7 @@ package local.agent.web;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.Assumptions;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -54,6 +55,18 @@ final class ZipProjectUploadTest {
         try (var upload = ZipProjectUpload.extract(new ByteArrayInputStream(bytes.toByteArray()), workspace, bytes.size())) {
             assertEquals("文档", upload.projectRoot().getFileName().toString());
             assertEquals("中文内容", Files.readString(upload.projectRoot().resolve("说明.md")));
+        }
+    }
+
+    @Test void optionallyChecksRealWorldLegacyZipWithoutModifyingSource() throws Exception {
+        String supplied = System.getProperty("sentinel.external.zip");
+        Assumptions.assumeTrue(supplied != null && !supplied.isBlank(), "no external ZIP supplied");
+        Path source = Path.of(supplied);
+        Assumptions.assumeTrue(Files.isRegularFile(source), "external ZIP is missing");
+        try (var input = Files.newInputStream(source);
+             var upload = ZipProjectUpload.extract(input, workspace, Files.size(source))) {
+            assertTrue(Files.isDirectory(upload.projectRoot()));
+            try (var children = Files.list(upload.projectRoot())) { assertTrue(children.findAny().isPresent()); }
         }
     }
 
