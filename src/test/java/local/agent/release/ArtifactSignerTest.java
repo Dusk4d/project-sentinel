@@ -24,6 +24,7 @@ final class ArtifactSignerTest {
         assertEquals("2026-09-a", verified.keyId());
         assertEquals(64, verified.artifactSha256().length());
         assertTrue(Files.readString(signature).contains("algorithm=Ed25519"));
+        assertTrue(Files.readString(signature).contains("schemaVersion=2"));
     }
 
     @Test void detectsTamperingAndWrongPublicKey() throws Exception {
@@ -49,5 +50,19 @@ final class ArtifactSignerTest {
         service.sign(artifact, keys.privateKey(), keys.keyId(), output);
         assertThrows(java.nio.file.FileAlreadyExistsException.class,
                 () -> service.sign(artifact, keys.privateKey(), keys.keyId(), output));
+    }
+
+    @Test void bindsKeyIdAndRejectsLegacyUnsignedMetadata() throws Exception {
+        var service = new ArtifactSigner();
+        var keys = service.generate(root.resolve("keys"), "first");
+        Path artifact = Files.writeString(root.resolve("artifact.jar"), "original");
+        Path signature = service.sign(artifact, keys.privateKey(), keys.keyId(), root.resolve("artifact.jar.sig"));
+        String metadata = Files.readString(signature);
+
+        Files.writeString(signature, metadata.replace("keyId=first", "keyId=other"));
+        assertFalse(service.verify(artifact, keys.publicKey(), signature).valid());
+
+        Files.writeString(signature, metadata.replace("schemaVersion=2", "schemaVersion=1"));
+        assertThrows(java.io.IOException.class, () -> service.verify(artifact, keys.publicKey(), signature));
     }
 }

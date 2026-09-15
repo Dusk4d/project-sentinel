@@ -20,6 +20,7 @@ import java.util.Set;
 
 public final class ArtifactSigner {
     private static final long MAX_METADATA_BYTES = 64 * 1024;
+    private static final byte[] SIGNING_DOMAIN = "Project Sentinel artifact signature v2\n".getBytes(StandardCharsets.US_ASCII);
 
     public KeyFiles generate(Path directory, String keyId) throws Exception {
         requireKeyId(keyId);
@@ -48,9 +49,10 @@ public final class ArtifactSigner {
         byte[] key = boundedRead(privateKeyFile, 16 * 1024, "私钥");
         var signer = Signature.getInstance("Ed25519");
         signer.initSign(KeyFactory.getInstance("Ed25519").generatePrivate(new PKCS8EncodedKeySpec(key)));
-        update(signer, input);
-        String metadata = "schemaVersion=1\nalgorithm=Ed25519\nkeyId=" + keyId + "\nartifactSha256="
-                + sha256(input) + "\nsignature=" + Base64.getEncoder().encodeToString(signer.sign()) + "\n";
+        bindKeyId(signer, keyId);
+        String digest = update(signer, input);
+        String metadata = "schemaVersion=2\nalgorithm=Ed25519\nkeyId=" + keyId + "\nartifactSha256="
+                + digest + "\nsignature=" + Base64.getEncoder().encodeToString(signer.sign()) + "\n";
         Path target = output.toAbsolutePath().normalize();
         if (target.getParent() != null) Files.createDirectories(target.getParent());
         Files.writeString(target, metadata, StandardCharsets.US_ASCII, StandardOpenOption.CREATE_NEW);
@@ -62,35 +64,40 @@ public final class ArtifactSigner {
         byte[] publicBytes = boundedRead(publicKeyFile, 16 * 1024, "公钥");
         var properties = new Properties();
         properties.load(new StringReader(new String(boundedRead(signatureFile, MAX_METADATA_BYTES, "签名文件"), StandardCharsets.US_ASCII)));
-        if (!"1".equals(properties.getProperty("schemaVersion")) || !"Ed25519".equals(properties.getProperty("algorithm")))
+        if (!"2".equals(properties.getProperty("schemaVersion")) || !"Ed25519".equals(properties.getProperty("algorithm")))
             throw new IOException("不支持的签名文件版本或算法");
         String keyId = required(properties, "keyId");
-        String actualDigest = sha256(input);
+        try { requireKeyId(keyId); }
+        catch (IllegalArgumentException invalid) { throw new IOException("签名文件的 keyId 无效", invalid); }
+        var verifier = Signature.getInstance("Ed25519");
+        verifier.initVerify(KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(publicBytes)));
+        bindKeyId(verifier, keyId);
+        String actualDigest = update(verifier, input);
         String expectedDigest = required(properties, "artifactSha256");
         if (!MessageDigest.isEqual(expectedDigest.getBytes(StandardCharsets.US_ASCII), actualDigest.getBytes(StandardCharsets.US_ASCII)))
             return new Verification(false, keyId, actualDigest, "构件 SHA-256 与签名记录不一致");
         byte[] signed;
         try { signed = Base64.getDecoder().decode(required(properties, "signature")); }
         catch (IllegalArgumentException invalid) { throw new IOException("签名值不是有效 Base64", invalid); }
-        var verifier = Signature.getInstance("Ed25519");
-        verifier.initVerify(KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(publicBytes)));
-        update(verifier, input);
         boolean valid = verifier.verify(signed);
         return new Verification(valid, keyId, actualDigest, valid ? "签名有效" : "Ed25519 签名无效");
     }
 
-    private static void update(Signature signature, Path file) throws Exception {
-        try (InputStream input = Files.newInputStream(file)) {
-            byte[] buffer = new byte[64 * 1024];
-            for (int read; (read = input.read(buffer)) >= 0;) if (read > 0) signature.update(buffer, 0, read);
-        }
+    private static void bindKeyId(Signature signature, String keyId) throws Exception {
+        byte[] encoded = keyId.getBytes(StandardCharsets.US_ASCII);
+        signature.update(SIGNING_DOMAIN);
+        signature.update((byte) encoded.length);
+        signature.update(encoded);
     }
 
-    private static String sha256(Path file) throws Exception {
+    private static String update(Signature signature, Path file) throws Exception {
         var digest = MessageDigest.getInstance("SHA-256");
         try (InputStream input = Files.newInputStream(file)) {
             byte[] buffer = new byte[64 * 1024];
-            for (int read; (read = input.read(buffer)) >= 0;) if (read > 0) digest.update(buffer, 0, read);
+            for (int read; (read = input.read(buffer)) >= 0;) if (read > 0) {
+                signature.update(buffer, 0, read);
+                digest.update(buffer, 0, read);
+            }
         }
         return HexFormat.of().formatHex(digest.digest());
     }
