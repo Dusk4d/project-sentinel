@@ -85,6 +85,30 @@ final class ProjectAnalyzerTest {
         assertFalse(profile.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.TESTS_MISSING)));
     }
 
+    @Test void doesNotMistakeOrdinaryNamesOrTestFixturesForExecutableTests() throws Exception {
+        Files.writeString(root.resolve("pom.xml"), "<project/>");
+        Path main = Files.createDirectories(root.resolve("src/main/java"));
+        Files.writeString(main.resolve("Contest.java"), "class Contest {} // TODO review\n");
+        Files.writeString(main.resolve("Testimony.java"), "class Testimony {}\n");
+        Files.writeString(main.resolve("Specification.java"), "class Specification {}\n");
+        Path tests = Files.createDirectories(root.resolve("src/tests"));
+        Files.writeString(tests.resolve("README.md"), "test instructions");
+        Files.writeString(tests.resolve("fixture.json"), "{}");
+
+        var withoutTests = new ProjectAnalyzer().analyze(root);
+        assertEquals(3, withoutTests.sourceFileCount());
+        assertEquals(0, withoutTests.testFileCount());
+        assertEquals(1, withoutTests.todoCount());
+        assertTrue(withoutTests.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.TESTS_MISSING)));
+
+        Files.writeString(tests.resolve("Case.java"), "class Case {}");
+        Files.writeString(main.resolve("ContestTest.java"), "class ContestTest {}");
+        var withTests = new ProjectAnalyzer().analyze(root);
+        assertEquals(3, withTests.sourceFileCount());
+        assertEquals(2, withTests.testFileCount());
+        assertFalse(withTests.findings().stream().anyMatch(f -> f.ruleId().equals(RuleCatalog.TESTS_MISSING)));
+    }
+
     @Test void reportsMissingAndPresentDependencyLock() throws Exception {
         Files.writeString(root.resolve("package.json"), "{}");
         var unlocked = new ProjectAnalyzer().analyze(root);

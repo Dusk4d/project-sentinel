@@ -57,8 +57,8 @@ public final class ProjectAnalyzer {
         boolean gitIgnore = Files.isRegularFile(normalized.resolve(".gitignore"));
         boolean license = files.stream().anyMatch(p -> p.getParent().equals(normalized)
                 && p.getFileName().toString().toLowerCase(Locale.ROOT).matches("license([._-].*)?|copying([._-].*)?"));
-        int sourceCount = (int) files.stream().filter(this::isSource).count();
-        int testCount = (int) files.stream().filter(this::isTest).count();
+        int sourceCount = (int) files.stream().filter(path -> isSource(normalized, path)).count();
+        int testCount = (int) files.stream().filter(path -> hasSourceExtension(path) && isTest(normalized, path)).count();
         TodoScan todoScan = scanTodos(normalized, files, config);
         int todos = todoScan.count();
         String ecosystem = detectEcosystem(normalized);
@@ -161,9 +161,13 @@ public final class ProjectAnalyzer {
         return path.getFileName().toString().toLowerCase(Locale.ROOT).matches("readme([._-].*)?");
     }
 
-    private boolean isSource(Path path) {
+    private boolean hasSourceExtension(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return SOURCE_EXTENSIONS.stream().anyMatch(name::endsWith) && !isTest(path);
+        return SOURCE_EXTENSIONS.stream().anyMatch(name::endsWith);
+    }
+
+    private boolean isSource(Path root, Path path) {
+        return hasSourceExtension(path) && !isTest(root, path);
     }
 
     private boolean hasSensitiveName(Path path) {
@@ -172,10 +176,20 @@ public final class ProjectAnalyzer {
                 || name.endsWith(".pem") || name.endsWith(".p12") || name.endsWith(".pfx") || name.equals("credentials.json");
     }
 
-    private boolean isTest(Path path) {
-        String value = path.toString().toLowerCase(Locale.ROOT).replace('\\', '/');
-        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return value.contains("/test/") || value.contains("/tests/") || name.contains("test") || name.contains("spec");
+    private boolean isTest(Path root, Path path) {
+        Path parent = root.relativize(path).getParent();
+        if (parent != null) for (Path part : parent) {
+            String directory = part.toString().toLowerCase(Locale.ROOT);
+            if (directory.equals("test") || directory.equals("tests") || directory.equals("__tests__")) return true;
+        }
+        String name = path.getFileName().toString();
+        int extension = name.lastIndexOf('.');
+        String stem = extension < 0 ? name : name.substring(0, extension);
+        return stem.matches("(?i)(?:test|tests|spec|specs)")
+                || stem.matches("(?i)(?:test|spec)[._-].+")
+                || stem.matches("(?i).+[._-](?:tests?|specs?)(?:[._-].+)?")
+                || stem.matches(".*(?:Test|Tests|Spec|Specs)")
+                || stem.matches("(?:Test|Spec)[A-Z].*");
     }
 
     private synchronized TodoScan scanTodos(Path root, List<Path> files, AnalyzerConfig config) {
@@ -184,7 +198,7 @@ public final class ProjectAnalyzer {
         var seen = new HashSet<Path>();
         for (Path file : files) {
             try {
-                if (!isSource(file) || Files.size(file) > config.maxTextBytes()) continue;
+                if (!isSource(root, file) || Files.size(file) > config.maxTextBytes()) continue;
                 Path real = file.toRealPath();
                 seen.add(real);
                 BasicFileAttributes attributes = Files.readAttributes(real, BasicFileAttributes.class);

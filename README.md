@@ -2,7 +2,7 @@
 
 Project Sentinel 是一个基于 Java 21 的本地项目健康检查与行动规划 Agent，面向学生和个人开发者。现实问题是：项目散落在本机，README、测试、构建配置和 TODO 状态常常无人持续维护，直到交付或面试前才暴露风险。本工具在源码不离开本机的前提下扫描项目，给出带文件证据的风险分级和下一步行动建议。构件名和 Java 包暂时保留兼容名称 `workspace-agent`。
 
-源码计数覆盖 JVM、Python、Ruby、PHP、JavaScript/TypeScript、React JSX/TSX、Vue、Svelte、Go、Rust、C/C++、Objective-C、.NET、Swift、Dart、Lua、R、Shell 和 PowerShell 等常见扩展名；测试文件通过测试目录及 `test`/`spec` 命名识别。
+源码计数覆盖 JVM、Python、Ruby、PHP、JavaScript/TypeScript、React JSX/TSX、Vue、Svelte、Go、Rust、C/C++、Objective-C、.NET、Swift、Dart、Lua、R、Shell 和 PowerShell 等常见扩展名；测试计数仅包含这些扩展名的代码文件，通过项目相对的测试目录或明确的 `test`/`spec` 文件名模式识别，不把 fixture、文档或普通名称中偶然含有这些字母的源码算作测试。
 
 当前版本完全本地运行，不需要 API 密钥，也不会把代码发送给第三方。
 
